@@ -23,7 +23,7 @@ dev = ["pytest>=8.0"]
 leadsmith = "cli:app"
 
 [tool.setuptools]
-py-modules = ["cli", "config", "db", "prospect"]
+py-modules = ["cli", "config", "db", "enrich", "prospect", "search"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

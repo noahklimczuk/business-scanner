@@ -12,7 +12,9 @@ from rich.table import Table
 
 import config
 import db
+import enrich as enrich_mod
 import prospect
+import search
 
 app = typer.Typer(add_completion=False, no_args_is_help=True,
                   help="Find businesses with no website, score them, and work the pipeline.")
@@ -174,6 +176,144 @@ def _print_result(con, sp: prospect.ScanPlan, res: prospect.ScanResult) -> None:
 
 
 # ---------------------------------------------------------------------------
+@app.command()
+def enrich(
+    limit: int = typer.Option(50, "--limit", "-n", help="Best-scoring leads first."),
+    provider: str = typer.Option("ddg", "--provider",
+                                 help=f"Social lookup: {', '.join(search.PROVIDERS)}."),
+    city: Optional[str] = typer.Option(None, "--city",
+                                       help="Disambiguates the search; defaults to "
+                                            "business.home_city in config.json."),
+    pause: Optional[float] = typer.Option(None, "--pause",
+                                          help="Seconds between searches. Raise it if "
+                                               "you get rate-limited."),
+    force: bool = typer.Option(False, "--force", help="Re-enrich leads already done."),
+) -> None:
+    """Normalise phones, find social pages, drop chains and duplicates.
+
+    Costs nothing at Google. Social lookup scrapes a search engine — see the
+    note at the top of search.py, and use --provider none to skip it.
+    """
+    try:
+        cfg = config.load()
+        engine = search.get_provider(provider, pause)
+    except (config.ConfigError, ValueError) as exc:
+        _fail(str(exc))
+        return
+
+    where = city if city is not None else cfg["business"].get("home_city", "")
+    con = db.connect()
+    pending = db.leads_to_enrich(con, limit, force)
+    if not pending:
+        console.print("[dim]Nothing to enrich. Everything is done — "
+                      "use --force to redo it.[/dim]")
+        con.close()
+        return
+
+    with Progress(TextColumn("[progress.description]{task.description}"),
+                  BarColumn(), TextColumn("{task.completed}/{task.total}"),
+                  TimeElapsedColumn(), console=console) as progress:
+        task = progress.add_task("enriching", total=len(pending))
+
+        def on_progress(done: int, total: int, name: str) -> None:
+            progress.update(task, completed=done, description=f"enriching · {name[:28]}")
+
+        res = enrich_mod.run(con, engine, limit=limit, force=force, city=where,
+                             region=cfg["defaults"]["region_code"],
+                             progress=on_progress)
+
+    t = Table(box=None, show_header=False, pad_edge=False)
+    t.add_column(style="dim")
+    t.add_column(justify="right")
+    t.add_row("leads processed", f"{res.processed:,}")
+    t.add_row("phones normalised", f"{res.phones_normalised:,}")
+    t.add_row("phones that do not dial", f"{res.phones_invalid:,}")
+    t.add_row("social pages found", f"[bold green]{res.socials_found:,}[/bold green]")
+    t.add_row("searches run / failed", f"{res.searches:,} / {res.search_failed:,}")
+    t.add_row("chains dropped", f"{res.chains_marked:,}")
+    t.add_row("duplicates merged", f"{res.duplicates_marked:,}")
+    t.add_row("scores improved", f"{res.improved:,} "
+                                 f"[dim]net {res.score_delta:+,} points[/dim]")
+    if res.consent_found:
+        t.add_row("CASL bases recorded", f"{res.consent_found:,}")
+    console.print(Panel(t, title="enrichment complete", border_style="green", expand=False))
+
+    if res.stopped:
+        console.print(Panel(res.stopped, title="social lookup stopped",
+                            border_style="yellow", expand=False))
+    if res.manual_queries:
+        console.print("Run these yourself, then record what you find with "
+                      "[bold]leadsmith consent[/bold]:")
+        for url in res.manual_queries:
+            console.print(f"  {url}")
+    con.close()
+
+
+# ---------------------------------------------------------------------------
+@app.command()
+def consent(
+    place_id: str,
+    email: Optional[str] = typer.Option(None, "--email", help="The published address."),
+    source: Optional[str] = typer.Option(None, "--source",
+                                         help="Where you saw it, e.g. 'public Facebook page'."),
+    basis: str = typer.Option("conspicuous_publication", "--basis",
+                              help=f"One of: {', '.join(db.CONSENT_BASES)}"),
+    withdraw: bool = typer.Option(False, "--withdraw",
+                                  help="They asked you to stop. Records it now."),
+) -> None:
+    """Record the CASL basis for writing to a lead — or that it was withdrawn.
+
+    This tool never sends email. The record exists so that if you ever do, the
+    reason and its date are written down, which is the part CASL asks for.
+    """
+    con = db.connect()
+    if not db.get(con, place_id):
+        _fail(f"No lead with place_id {place_id}.")
+        return
+    if withdraw:
+        db.withdraw_consent(con, place_id)
+        con.commit()
+        console.print("[green]Withdrawal recorded.[/green] "
+                      "CASL gives you 10 business days; you have it in writing now.")
+        con.close()
+        return
+    if not email or not source:
+        _fail("Recording a basis needs both --email (the address you saw) and "
+              "--source (where you saw it). That pair is the whole record.")
+        return
+    try:
+        db.record_consent(con, place_id, basis, email, source)
+    except ValueError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+    console.print(f"[green]Recorded[/green] {basis} for {email} — {source}")
+    console.print("[dim]Any message still needs your legal name, mailing address, "
+                  "a working contact method, and an unsubscribe.[/dim]")
+    con.close()
+
+
+# ---------------------------------------------------------------------------
+@app.command()
+def dupes() -> None:
+    """Listings that enrichment decided are the same business twice."""
+    con = db.connect()
+    rows = db.duplicates(con)
+    if not rows:
+        console.print("[dim]No duplicates flagged.[/dim]")
+        con.close()
+        return
+    t = Table(header_style="dim")
+    t.add_column("duplicate")
+    t.add_column("folded into")
+    t.add_column("place_id")
+    for r in rows:
+        t.add_row(r["name"] or "-", r["canonical_name"] or r["duplicate_of"], r["place_id"])
+    console.print(t)
+    con.close()
+
+
+# ---------------------------------------------------------------------------
 @app.command("list")
 def list_leads(
     stage: Optional[str] = typer.Option(None, "--stage", "-s",
@@ -184,6 +324,8 @@ def list_leads(
                                    help="Only the social-page / dead-builder segment."),
     min_score: int = typer.Option(0, "--min-score"),
     limit: int = typer.Option(25, "--limit", "-n"),
+    show_all: bool = typer.Option(False, "--all",
+                                  help="Include dead leads and duplicates."),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
 ) -> None:
     """Show leads, best first."""
@@ -194,7 +336,8 @@ def list_leads(
 
     con = db.connect()
     rows = db.leads(con, stage=stage, kind=kind, min_score=min_score,
-                    limit=None if near_miss else limit)
+                    limit=None if near_miss else limit,
+                    exclude_dead=not show_all, exclude_duplicates=not show_all)
     if near_miss:
         rows = [r for r in rows if r["website_kind"] in ("social", "defunct")][:limit]
 
@@ -214,14 +357,21 @@ def list_leads(
     t.add_column("reviews", justify="right")
     t.add_column("rating", justify="right")
     t.add_column("phone")
+    t.add_column("social")
     t.add_column("web")
     t.add_column("stage")
     for r in rows:
+        social = "+".join(s for s, col in (("fb", "facebook_url"), ("ig", "instagram_url"))
+                          if r[col])
+        phone = r["phone_e164"] or r["phone"]
+        if r["phone"] and r["phone_valid"] == 0:
+            phone = f"[red]{r['phone']} ✗[/red]"
         t.add_row(
             str(r["score"]), r["name"] or "", r["category"] or "",
             str(r["review_count"] or 0),
             f"{r['rating']:.1f}" if r["rating"] else "-",
-            r["phone"] or "[bright_black]none[/bright_black]",
+            phone or "[bright_black]none[/bright_black]",
+            social,
             KIND_LABEL.get(r["website_kind"] or "none", r["website_kind"] or ""),
             f"[{BAND_COLOUR.get(r['stage'], 'white')}]{r['stage']}[/]",
         )
@@ -245,10 +395,17 @@ def show(place_id: str) -> None:
     t = Table(box=None, show_header=False)
     t.add_column(style="dim")
     t.add_column()
-    for k in ("name", "category", "address", "phone", "rating", "review_count",
-              "website", "website_kind", "score", "stage", "found_at",
-              "refreshed_at", "consent_basis", "notes"):
+    for k in ("name", "category", "address", "phone", "phone_e164", "phone_type",
+              "rating", "review_count", "website", "website_kind",
+              "facebook_url", "instagram_url", "score", "stage", "found_at",
+              "refreshed_at", "enriched_at", "duplicate_of", "consent_basis",
+              "consent_email", "notes"):
         t.add_row(k, str(row[k]) if row[k] is not None else "-")
+    if row["is_chain"]:
+        t.add_row("chain", "[yellow]yes — head office owns this decision[/yellow]")
+    if row["consent_basis"]:
+        t.add_row("may email", "yes" if db.may_email(row) else
+                               "[red]no — consent withdrawn[/red]")
     hours = jsonlib.loads(row["hours_json"]) if row["hours_json"] else None
     if hours:
         t.add_row("hours", "\n".join(hours))
