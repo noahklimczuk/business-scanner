@@ -1,0 +1,19 @@
+{
+  "google_api_key": "PASTE_YOUR_PLACES_API_KEY_HERE",
+
+  "business": {
+    "operator_name": "Your Name",
+    "legal_name": "Your Name o/a Leadsmith",
+    "phone": "+1 905 555 0123",
+    "email": "you@example.com",
+    "mailing_address": "123 Main St, Newmarket, ON L3Y 0A0",
+    "home_city": "Newmarket, ON"
+  },
+
+  "defaults": {
+    "radius_km": 10,
+    "cell_m": 900,
+    "region_code": "CA",
+    "confirm_above_usd": 25.0
+  }
+}

@@ -1,0 +1,17 @@
+# Secrets and local state — never commit these.
+config.json
+.env
+leads.db
+leads.db-journal
+leads.db-wal
+leads.db-shm
+
+# Generated client sites (Phase 3+).
+sites/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
