@@ -252,6 +252,16 @@ def score(rec: dict[str, Any]) -> int:
     elif kind == "defunct":
         s += 5
 
+    # Phase 2 enrichment. All absent at scan time, so scanning is unchanged.
+    if rec.get("phone") and rec.get("phone_valid") is not None and not rec["phone_valid"]:
+        s -= 10                                            # the listed number does not dial
+    if rec.get("phone_type") == "toll_free":
+        s -= 5                                             # 1-800 is a chain or an agency front
+    if kind == "none" and (rec.get("facebook_url") or rec.get("instagram_url")):
+        s += 12                                            # near-miss, found by search
+    if rec.get("is_chain"):
+        s -= 40                                            # head office owns this decision
+
     return max(0, min(100, s))
 
 

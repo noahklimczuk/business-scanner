@@ -34,11 +34,19 @@ WEBSITE_KINDS = ["none", "social", "defunct", "real"]
 CACHE_TTL_DAYS = 30
 
 # Fields on `leads` that came from Google and therefore expire. Pipeline state
-# (stage, notes, score, touches) is ours and survives a purge.
+# (stage, notes, score, touches) is ours and survives a purge. `phone_e164` is
+# derived from Google's phone number, so it expires with it; the social URLs we
+# found ourselves and they stay.
 CACHED_LEAD_FIELDS = [
     "name", "category", "address", "phone", "lat", "lng",
     "rating", "review_count", "hours_json", "website", "website_kind",
+    "phone_e164", "phone_valid", "phone_type",
 ]
+
+# CASL consent bases we will actually record. There is no implied-consent
+# "existing business relationship" option here on purpose: we have no prior
+# relationship with a cold lead, and inventing one is how people get fined.
+CONSENT_BASES = ["conspicuous_publication", "express"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS leads (
@@ -63,9 +71,22 @@ CREATE TABLE IF NOT EXISTS leads (
     site_dir      TEXT,
     -- CASL: null means we have no consent basis and must not send electronic
     -- commercial messages. Phone, walk-in and physical mail are unaffected.
-    consent_basis TEXT,
-    consent_at    TEXT,
-    consent_note  TEXT
+    consent_basis     TEXT,
+    consent_at        TEXT,
+    consent_note      TEXT,
+    consent_email     TEXT,
+    consent_withdrawn_at TEXT,
+    -- Phase 2 enrichment.
+    phone_e164        TEXT,
+    phone_valid       INTEGER,
+    phone_type        TEXT,
+    facebook_url      TEXT,
+    instagram_url     TEXT,
+    social_confidence REAL,
+    social_checked_at TEXT,
+    enriched_at       TEXT,
+    is_chain          INTEGER DEFAULT 0,
+    duplicate_of      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_score ON leads(score DESC);
@@ -135,6 +156,18 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("consent_basis", "TEXT"),
         ("consent_at", "TEXT"),
         ("consent_note", "TEXT"),
+        ("consent_email", "TEXT"),
+        ("consent_withdrawn_at", "TEXT"),
+        ("phone_e164", "TEXT"),
+        ("phone_valid", "INTEGER"),
+        ("phone_type", "TEXT"),
+        ("facebook_url", "TEXT"),
+        ("instagram_url", "TEXT"),
+        ("social_confidence", "REAL"),
+        ("social_checked_at", "TEXT"),
+        ("enriched_at", "TEXT"),
+        ("is_chain", "INTEGER DEFAULT 0"),
+        ("duplicate_of", "TEXT"),
     ],
     "market": [],
     "scans": [],
@@ -254,15 +287,20 @@ def set_stage(con: sqlite3.Connection, place_id: str, stage: str) -> None:
 
 def leads(con: sqlite3.Connection, stage: Optional[str] = None,
           kind: Optional[str] = None, min_score: int = 0,
-          limit: Optional[int] = None) -> list[sqlite3.Row]:
+          limit: Optional[int] = None, exclude_dead: bool = False,
+          exclude_duplicates: bool = False) -> list[sqlite3.Row]:
     q = ["SELECT * FROM leads WHERE score >= ?"]
     args: list[Any] = [min_score]
     if stage:
         q.append("AND stage = ?")
         args.append(stage)
+    elif exclude_dead:
+        q.append("AND stage != 'dead'")
     if kind:
         q.append("AND website_kind = ?")
         args.append(kind)
+    if exclude_duplicates:
+        q.append("AND duplicate_of IS NULL")
     q.append("ORDER BY score DESC, review_count DESC")
     if limit:
         q.append("LIMIT ?")
@@ -278,6 +316,110 @@ def touches(con: sqlite3.Connection, place_id: str) -> list[sqlite3.Row]:
     return con.execute(
         "SELECT * FROM touches WHERE place_id=? ORDER BY at DESC", (place_id,)
     ).fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Enrichment (Phase 2)
+# ---------------------------------------------------------------------------
+def leads_to_enrich(con: sqlite3.Connection, limit: int = 50,
+                    force: bool = False) -> list[sqlite3.Row]:
+    """Best leads first — enrichment costs wall-clock time, so spend it well."""
+    q = ["SELECT * FROM leads WHERE stage != 'dead' AND duplicate_of IS NULL"]
+    if not force:
+        q.append("AND enriched_at IS NULL")
+    q.append("ORDER BY score DESC, review_count DESC LIMIT ?")
+    return con.execute(" ".join(q), (int(limit),)).fetchall()
+
+
+def save_enrichment(con: sqlite3.Connection, place_id: str, **fields: Any) -> None:
+    allowed = {"phone_e164", "phone_valid", "phone_type", "facebook_url",
+               "instagram_url", "social_confidence", "social_checked_at",
+               "score", "enriched_at"}
+    unknown = set(fields) - allowed
+    if unknown:
+        raise ValueError(f"save_enrichment does not write {', '.join(sorted(unknown))}")
+    sets = ", ".join(f"{k}=?" for k in fields)
+    con.execute(f"UPDATE leads SET {sets} WHERE place_id=?",
+                (*fields.values(), place_id))
+
+
+def mark_chain(con: sqlite3.Connection, place_id: str, note: str) -> bool:
+    """Flag a chain location. Kills it only if we have never worked it."""
+    row = con.execute("SELECT stage, is_chain FROM leads WHERE place_id=?",
+                      (place_id,)).fetchone()
+    if not row or row["is_chain"]:
+        return False
+    con.execute("UPDATE leads SET is_chain=1 WHERE place_id=?", (place_id,))
+    if row["stage"] in ("new", "queued"):
+        con.execute(
+            """UPDATE leads SET stage='dead',
+                      notes = TRIM(COALESCE(notes,'') || ' [auto] ' || ?)
+               WHERE place_id=?""", (note, place_id))
+    return True
+
+
+def mark_duplicate(con: sqlite3.Connection, place_id: str, canonical: str,
+                   note: str) -> bool:
+    row = con.execute("SELECT stage, duplicate_of FROM leads WHERE place_id=?",
+                      (place_id,)).fetchone()
+    if not row or row["duplicate_of"]:
+        return False
+    con.execute("UPDATE leads SET duplicate_of=? WHERE place_id=?",
+                (canonical, place_id))
+    if row["stage"] in ("new", "queued"):
+        con.execute(
+            """UPDATE leads SET stage='dead',
+                      notes = TRIM(COALESCE(notes,'') || ' [auto] ' || ?)
+               WHERE place_id=?""", (note, place_id))
+    return True
+
+
+def duplicates(con: sqlite3.Connection) -> list[sqlite3.Row]:
+    return con.execute(
+        """SELECT d.place_id, d.name, d.duplicate_of, c.name AS canonical_name
+           FROM leads d LEFT JOIN leads c ON c.place_id = d.duplicate_of
+           WHERE d.duplicate_of IS NOT NULL ORDER BY c.name""").fetchall()
+
+
+def record_consent(con: sqlite3.Connection, place_id: str, basis: str,
+                   email: str, source: str) -> None:
+    """CASL: log the basis and the date we established it, per lead.
+
+    Nothing in this tool sends email. This exists so that if the operator ever
+    does write to someone, there is a dated record of why that was allowed.
+    """
+    if basis not in CONSENT_BASES:
+        raise ValueError(f"Unknown consent basis '{basis}'. "
+                         f"Use one of: {', '.join(CONSENT_BASES)}")
+    con.execute(
+        """UPDATE leads SET consent_basis=?, consent_at=?, consent_email=?,
+                  consent_note=?, consent_withdrawn_at=NULL
+           WHERE place_id=?""", (basis, now(), email, source, place_id))
+
+
+def withdraw_consent(con: sqlite3.Connection, place_id: str) -> None:
+    # CASL gives you 10 business days to honour a withdrawal. Recording it the
+    # moment it happens is the only way that clock is ever met.
+    con.execute("UPDATE leads SET consent_withdrawn_at=? WHERE place_id=?",
+                (now(), place_id))
+
+
+def may_email(row: Any) -> bool:
+    """The one gate. False unless a basis was recorded and not withdrawn."""
+    return bool(row["consent_basis"]) and not row["consent_withdrawn_at"]
+
+
+def chain_input(con: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every business we know of, leads and market alike, for chain detection.
+
+    A chain's other locations usually *do* have websites, so they only exist in
+    `market` — detecting chains from the lead table alone misses most of them.
+    """
+    rows = con.execute(
+        """SELECT place_id, name, lat, lng FROM leads
+           UNION
+           SELECT place_id, name, lat, lng FROM market""").fetchall()
+    return [dict(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
