@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leadsmith"
+version = "0.1.0"
+description = "Find businesses with no website, build them one, sell it in person."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "requests>=2.31",
+    "jinja2>=3.1",
+    "rich>=13.7",
+    "phonenumbers>=8.13",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+leadsmith = "cli:app"
+
+[tool.setuptools]
+py-modules = ["cli", "config", "db", "prospect"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
