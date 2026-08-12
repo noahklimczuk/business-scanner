@@ -1,0 +1,26 @@
+{# The image slot. Owner photography when it has been collected, generated
+   artwork until then — same box either way, so the layout never shifts on the
+   day the real pictures arrive. #}
+{% macro art(index=0, tall=False, caption='') %}
+<figure class="art-panel{{ ' art-panel-tall' if tall else '' }}" style="margin:0">
+  {% if photos and photos|length > index %}
+  <img class="art-photo drift" src="{{ photos[index].src }}" alt="{{ photos[index].alt }}"
+       {% if photos[index].width %}width="{{ photos[index].width }}"{% endif %}
+       {% if photos[index].height %}height="{{ photos[index].height }}"{% endif %}
+       {% if index > 0 %}loading="lazy" decoding="async"{% else %}fetchpriority="high"{% endif %}>
+  {% else %}
+  {{ artwork }}
+  {% endif %}
+</figure>
+{% endmacro %}
+
+{% macro hero_actions(primary_label) %}
+{% if phone_href %}
+<div class="actions rise-now rise-now-3">
+  <a class="btn btn-primary" href="tel:{{ phone_href }}">{{ primary_label }}</a>
+  {% if lead.address %}
+  <a class="chev" href="{{ map_url }}" rel="noopener">Get directions</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

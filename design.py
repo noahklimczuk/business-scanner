@@ -16,13 +16,22 @@ import hashlib
 import math
 from typing import Iterable
 
-# Light, very slightly cool. Deliberately not the warm cream that every
-# generated site is wearing this year — this reads as clean trade signage.
-SURFACE = "#FBFBFC"
-SURFACE_SUNK = "#F1F2F5"
-INK = "#14171C"
-INK_MUTED = "#5A616E"
-HAIRLINE = "#DFE2E8"
+# A near-white page and a true-black section, alternating. The neutrals are
+# deliberately almost colourless so the one derived accent is the only colour
+# on the page.
+SURFACE = "#FBFBFD"
+SURFACE_SUNK = "#F5F5F7"
+INK = "#1D1D1F"
+INK_MUTED = "#6E6E73"
+HAIRLINE = "#D2D2D7"
+
+# Dark sections need their own pairs. An accent darkened until white text sits
+# on it comfortably is far too dark to *be* text on black — this is the pair
+# that silently fails when a light-only palette grows a dark section.
+NIGHT = "#000000"
+NIGHT_SUNK = "#141416"
+NIGHT_INK = "#F5F5F7"
+NIGHT_MUTED = "#A1A1A6"
 
 AA_TEXT = 4.5          # WCAG AA, body text
 AA_LARGE = 3.0         # WCAG AA, large text and UI boundaries
@@ -118,6 +127,17 @@ def _darken_until(target: float, against: str, chroma: float, hue: float,
     return colour
 
 
+def _lighten_until(target: float, against: str, chroma: float, hue: float,
+                   start: float = 0.62) -> str:
+    """The mirror of `_darken_until`, for the accent used on dark sections."""
+    lightness = start
+    colour = oklch_to_hex(lightness, chroma, hue)
+    while contrast(colour, against) < target and lightness < 0.99:
+        lightness += 0.02
+        colour = oklch_to_hex(lightness, chroma, hue)
+    return colour
+
+
 def palette_for(place_id: str, template: str = "trade") -> dict[str, str]:
     """The whole colour system for one business. Every pair meets WCAG AA."""
     hue = hue_for(place_id)
@@ -136,17 +156,31 @@ def palette_for(place_id: str, template: str = "trade") -> dict[str, str]:
     darkest = min((SURFACE, accent_wash, SURFACE_SUNK), key=relative_luminance)
     accent_ink = _darken_until(AA_TEXT, darkest, chroma, hue)
 
+    # On black, the accent has to go the other way. Reusing `accent_ink` here
+    # would put a near-black colour on a black background.
+    accent_bright = _lighten_until(AA_TEXT, NIGHT_SUNK, chroma, hue)
+    # Aurora layers: high lightness, low chroma, blended at low opacity.
+    accent_glow = oklch_to_hex(0.82, min(0.13, chroma * 0.9), hue)
+    accent_glow_alt = oklch_to_hex(0.78, min(0.12, chroma * 0.8), (hue + 42) % 360)
+
     return {
         "accent": accent,
         "accent_ink": accent_ink,
+        "accent_bright": accent_bright,
         "accent_wash": accent_wash,
         "accent_edge": accent_edge,
+        "accent_glow": accent_glow,
+        "accent_glow_alt": accent_glow_alt,
         "accent_fg": "#FFFFFF",
         "surface": SURFACE,
         "surface_sunk": SURFACE_SUNK,
         "ink": INK,
         "ink_muted": INK_MUTED,
         "hairline": HAIRLINE,
+        "night": NIGHT,
+        "night_sunk": NIGHT_SUNK,
+        "night_ink": NIGHT_INK,
+        "night_muted": NIGHT_MUTED,
         "hue": f"{hue:.1f}",
     }
 
@@ -161,4 +195,9 @@ def audit(palette: dict[str, str]) -> dict[str, float]:
         "ink_on_wash": contrast(palette["ink"], palette["accent_wash"]),
         "accent_ink_on_wash": contrast(palette["accent_ink"], palette["accent_wash"]),
         "muted_on_sunk": contrast(palette["ink_muted"], palette["surface_sunk"]),
+        "night_ink_on_night": contrast(palette["night_ink"], palette["night"]),
+        "night_muted_on_night": contrast(palette["night_muted"], palette["night"]),
+        "accent_bright_on_night": contrast(palette["accent_bright"], palette["night"]),
+        "accent_bright_on_night_sunk": contrast(palette["accent_bright"],
+                                                palette["night_sunk"]),
     }

@@ -1,54 +1,43 @@
 {% extends "base.html" %}
-{% from "partials/plate.html" import call_plate with context %}
+{% from "partials/hero.html" import art, hero_actions with context %}
 
 {% block hero %}
 <section class="hero">
-  <div class="shell">
-    <div class="reveal hero-lead">
-      <p class="eyebrow">{{ lead.category or 'Studio' }}{% if city %} · {{ city }}{% endif %}</p>
-      <h1 class="hero-title">{{ c.hero_headline }}</h1>
-      <p class="hero-sub">{{ c.hero_sub }}</p>
-      <div class="hero-actions">
-        {% if phone_href %}
-        <a class="btn btn-primary" href="tel:{{ phone_href }}">Book by phone</a>
-        {% endif %}
-        <a class="btn btn-ghost" href="#services">Services</a>
-      </div>
-    </div>
-    {% if phone_href %}
-    <div class="reveal reveal-2 hero-plate">
-      {{ call_plate('Appointments') }}
-    </div>
-    {% endif %}
+  <div class="shell hero-copy">
+    <p class="eyebrow rise-now">{{ lead.category or 'Studio' }}{% if city %} · {{ city }}{% endif %}</p>
+    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+    {{ hero_actions('Book by phone') }}
+  </div>
+  <div class="shell-wide">
+    {{ art(0) }}
   </div>
 </section>
 {% endblock %}
 
 {% block services %}
 <section class="section" id="services">
-  <div class="shell">
-    <p class="eyebrow">Services</p>
-    <h2 class="h2">What we offer</h2>
-    <div class="stack">
-      {% for service in c.services %}
-      <div class="stack-row">
-        <h3 class="stack-name">{{ service.name }}</h3>
-        <p class="stack-copy">{{ service.description }}</p>
+  <div class="shell-wide stage">
+    <div>
+      <p class="eyebrow rise">Services</p>
+      <h2 class="headline rise">What we offer</h2>
+      <div class="stack rise" style="margin-top:2.75rem">
+        {% for service in c.services %}
+        <div class="stack-row">
+          <h3 class="stack-name">{{ service.name }}</h3>
+          <p class="stack-copy">{{ service.description }}</p>
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
+    </div>
+    <div class="stage-visual">
+      {{ art(1, tall=True) }}
     </div>
   </div>
 </section>
 {% endblock %}
 
 {% block extra_css %}
-/* Salon: more air, lighter display weight, softer corners. The plate is still
-   the loudest element — booking is still a phone call — but it sits below the
-   headline rather than competing with it. */
-.hero { padding-top: clamp(3rem, 9vw, 6rem); }
-.hero-lead { max-width: 48rem; }
-.hero-title { font-weight: 700; letter-spacing: -.025em; }
-.hero-plate { margin-top: 2.5rem; max-width: 24rem; }
-.section { padding: clamp(4rem, 10vw, 7rem) 0; }
-.stack-row:last-child { border-bottom: none; }
+/* Salon: the list leads and the visual follows, reversing the trade layout. */
+@media (min-width: 900px) { .stage-visual { top: 7.5rem; } }
 {% endblock %}

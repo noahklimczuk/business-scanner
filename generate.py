@@ -21,9 +21,11 @@ from typing import Any, Optional
 from urllib.parse import quote
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup
 
 import design
 import hours as hours_mod
+import visuals
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(ROOT, "templates")
@@ -413,6 +415,9 @@ def _facts(lead: dict[str, Any], city: str, hours_summary: str) -> list[dict[str
     return facts if len(facts) >= 2 else []
 
 
+SERVICES_WORD = {"trade": "Services", "food": "Menu", "salon": "Services"}
+
+
 def map_link(lead: dict[str, Any]) -> str:
     query = lead.get("address") or lead.get("name") or ""
     return "https://www.google.com/maps/search/?api=1&query=" + \
@@ -521,7 +526,11 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
         hours_summary=summary,
         week_json=hours_mod.week_minutes(day_list),
         schema=_schema(lead, content, day_list, site_url),
-        facts=_facts(lead, city, summary),
+        stats=_facts(lead, city, summary),
+        services_word=SERVICES_WORD.get(template, "Services"),
+        photos=visuals.photos_from(content),
+        artwork=Markup(visuals.artwork(lead["place_id"], template,
+                                       lead.get("name", ""))),
         favicon=_favicon(palette, lead.get("name", "")),
         year=datetime.date.today().year,
         phone_display=phone_display,
