@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "partials/plate.html" import call_plate with context %}
+
+{% block hero %}
+<section class="hero hero-centre">
+  <div class="shell">
+    <div class="reveal">
+      <p class="eyebrow eyebrow-centre">{{ lead.category or 'Local kitchen' }}{% if city %} · {{ city }}{% endif %}</p>
+      <h1 class="hero-title">{{ c.hero_headline }}</h1>
+      <p class="hero-sub">{{ c.hero_sub }}</p>
+    </div>
+    {% if phone_href %}
+    <div class="reveal reveal-2 hero-plate">
+      {{ call_plate('Order by phone') }}
+    </div>
+    {% endif %}
+    <div class="hero-actions hero-actions-centre">
+      <a class="btn btn-ghost" href="#services">See the menu</a>
+      {% if lead.address %}
+      <a class="btn btn-ghost" href="{{ map_url }}" rel="noopener">Find us</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block services %}
+<section class="section section-wash" id="services">
+  <div class="shell">
+    <p class="eyebrow">On the menu</p>
+    <h2 class="h2">What we serve</h2>
+    <div class="menu">
+      {% for service in c.services %}
+      <div class="menu-row">
+        <h3 class="menu-name">{{ service.name }}</h3>
+        <span class="menu-rule" aria-hidden="true"></span>
+        <p class="menu-copy">{{ service.description }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+/* Food: the room is the product, so the type is centred and the hours sit
+   right under the name — the two things someone checks before driving over. */
+.hero-centre { text-align: center; }
+.hero-centre .hero-sub { margin-left: auto; margin-right: auto; }
+.eyebrow-centre { justify-content: center; }
+.hero-centre .hero-plate { margin: 1.9rem auto 0; max-width: 26rem; }
+.hero-actions-centre { justify-content: center; }
+.menu-row:first-child { border-top: none; }
+{% endblock %}

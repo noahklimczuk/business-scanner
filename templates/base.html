@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ c.meta_title }}</title>
+<meta name="description" content="{{ c.meta_description }}">
+{% if preview %}
+{# Carries a real business's name before they have agreed to anything. It must
+   never compete with their own Google listing. Stripped on launch. #}
+<meta name="robots" content="noindex,nofollow">
+{% else %}
+<link rel="canonical" href="{{ site_url }}">
+{% endif %}
+<meta name="theme-color" content="{{ palette.accent }}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ c.meta_title }}">
+<meta property="og:description" content="{{ c.meta_description }}">
+<meta property="og:locale" content="en_CA">
+<meta property="og:site_name" content="{{ lead.name }}">
+{% if site_url %}
+<meta property="og:url" content="{{ site_url }}">
+{% endif %}
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,{{ favicon }}">
+<style>
+{% include "partials/styles.css.j2" %}
+{% block extra_css %}{% endblock %}
+</style>
+<script type="application/ld+json">{{ schema|tojson }}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="stripe"></div>
+
+<header class="masthead">
+  <div class="shell masthead-in">
+    <a class="wordmark" href="#main">
+      <span class="wordmark-badge" aria-hidden="true">{{ lead.name|initials }}</span>
+      <span class="wordmark-text">
+        <span class="wordmark-name">{{ lead.name }}</span>
+        {% if lead.category %}
+        <span class="wordmark-kind">{{ lead.category }}{% if city %} · {{ city }}{% endif %}</span>
+        {% endif %}
+      </span>
+    </a>
+    <div class="masthead-right">
+      {% if days %}
+      <span class="pill" data-openstate hidden>
+        <span class="pill-dot"></span><span data-openlabel>Hours</span>
+      </span>
+      {% endif %}
+      {% if phone_href %}
+      <a class="btn btn-primary btn-sm" href="tel:{{ phone_href }}">
+        <span class="btn-label">Call</span> {{ phone_display }}
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main id="main">
+{% block hero %}{% endblock %}
+
+{% if facts %}
+<div class="facts">
+  <div class="shell facts-in">
+    {% for fact in facts %}
+    <div class="fact">
+      <span class="fact-value">{{ fact.value }}</span>
+      <span class="fact-label">{{ fact.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% block services %}{% endblock %}
+
+<section class="section" id="about">
+  <div class="shell split">
+    <div>
+      <p class="eyebrow">About</p>
+      <h2 class="h2">{{ lead.name }}</h2>
+      {% for para in c.about %}
+      <p class="lede">{{ para }}</p>
+      {% endfor %}
+    </div>
+    <div>
+      <p class="eyebrow">Why call us</p>
+      <ul class="points">
+        {% for point in c.why_us %}
+        <li class="point"><span class="point-mark" aria-hidden="true">—</span><span>{{ point }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section contact" id="contact">
+  <div class="shell">
+    <p class="eyebrow">Get in touch</p>
+    <h2 class="h2">{{ c.cta_line }}</h2>
+    <div class="contact-grid">
+      <div>
+        {% if phone_href %}
+        <a class="contact-plate" href="tel:{{ phone_href }}">
+          <span class="plate-label"><span>Call</span><span>{{ city or 'Local' }}</span></span>
+          <span class="plate-number">{{ phone_display }}</span>
+        </a>
+        {% endif %}
+        {% if lead.address %}
+        <address class="addr">
+          {{ lead.address }}<br>
+          <a href="{{ map_url }}" rel="noopener">Get directions</a>
+        </address>
+        {% endif %}
+      </div>
+      {% if days %}
+      <div>
+        <table class="hours-table">
+          <caption class="eyebrow">Opening hours</caption>
+          <tbody>
+            {% for day in days %}
+            <tr data-day="{{ day.js_index }}">
+              <th scope="row">{{ day.day }}</th>
+              <td>{{ day.label }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="footer">
+  <div class="shell footer-in">
+    <span>&copy; {{ year }} {{ lead.name }}</span>
+    {% if lead.address %}<span>{{ lead.address }}</span>{% endif %}
+    {% if phone_href %}<a href="tel:{{ phone_href }}">{{ phone_display }}</a>{% endif %}
+  </div>
+</footer>
+
+{% if phone_href %}
+<nav class="callbar" aria-label="Contact">
+  <a class="btn btn-primary callbar-call" href="tel:{{ phone_href }}">Call {{ phone_display }}</a>
+  {% if lead.address %}
+  <a class="btn btn-ghost" href="{{ map_url }}" rel="noopener">Directions</a>
+  {% endif %}
+</nav>
+{% endif %}
+
+{% if days %}
+<script>
+/* Open-now, computed in the visitor's own clock. That is the right clock: the
+   people loading this page are standing in the same town. Minute offsets and
+   the past-midnight spill are worked out at build time in hours.py. */
+(function () {
+  var week = {{ week_json|tojson }};
+  var pills = document.querySelectorAll('[data-openstate]');
+  if (!pills.length) return;
+
+  function nextOpening(day, mins) {
+    for (var i = 0; i < 8; i++) {
+      var slots = week[(day + i) % 7] || [];
+      for (var j = 0; j < slots.length; j++) {
+        if (i > 0 || slots[j][0] > mins) return { at: slots[j][0], days: i };
+      }
+    }
+    return null;
+  }
+
+  function clock(mins) {
+    var h = Math.floor(mins / 60) % 24, m = mins % 60;
+    var suffix = h < 12 ? 'am' : 'pm';
+    h = (h % 12) || 12;
+    return m ? h + ':' + (m < 10 ? '0' : '') + m + suffix : h + suffix;
+  }
+
+  var now = new Date(), day = now.getDay(), mins = now.getHours() * 60 + now.getMinutes();
+  var open = false;
+  (week[day] || []).forEach(function (s) { if (mins >= s[0] && mins < s[1]) open = true; });
+  (week[(day + 6) % 7] || []).forEach(function (s) {
+    if (s[1] > 1440 && mins < s[1] - 1440) open = true;   /* closed after midnight */
+  });
+
+  var text = 'Closed';
+  if (!open) {
+    var next = nextOpening(day, mins);
+    if (next) {
+      text = 'Closed · opens ' + (next.days === 1 ? 'tomorrow ' : '') + clock(next.at);
+    }
+  }
+
+  Array.prototype.forEach.call(pills, function (pill) {
+    if (open) pill.classList.add('is-open');
+    var label = pill.querySelector('[data-openlabel]');
+    if (label) label.textContent = open ? 'Open now' : text;
+    pill.hidden = false;
+  });
+
+  var row = document.querySelector('.hours-table [data-day="' + day + '"]');
+  if (row) row.classList.add('is-today');
+})();
+</script>
+{% endif %}
+</body>
+</html>

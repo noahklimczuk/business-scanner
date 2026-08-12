@@ -137,6 +137,23 @@ CREATE TABLE IF NOT EXISTS scans (
     saturated     INTEGER
 );
 
+-- One row per paid copy generation, so the Claude bill is as visible as the
+-- Places bill. Re-rendering an existing content.json writes nothing here
+-- because it costs nothing.
+CREATE TABLE IF NOT EXISTS generations (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    place_id           TEXT,
+    at                 TEXT,
+    model              TEXT,
+    template           TEXT,
+    attempts           INTEGER,
+    input_tokens       INTEGER,
+    output_tokens      INTEGER,
+    cache_write_tokens INTEGER,
+    cache_read_tokens  INTEGER,
+    cost               REAL
+);
+
 -- Geocoding a town costs a call. Same 30-day expiry as everything else from
 -- Google, so re-scanning "Newmarket, ON" this week is free.
 CREATE TABLE IF NOT EXISTS geocache (
@@ -452,6 +469,30 @@ def record_scan(con: sqlite3.Connection, **kw: Any) -> int:
          kw.get("saturated", 0)),
     )
     return int(cur.lastrowid or 0)
+
+
+def record_generation(con: sqlite3.Connection, place_id: str, **kw: Any) -> None:
+    con.execute(
+        """INSERT INTO generations
+           (place_id, at, model, template, attempts, input_tokens, output_tokens,
+            cache_write_tokens, cache_read_tokens, cost)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (place_id, now(), kw.get("model"), kw.get("template"), kw.get("attempts"),
+         kw.get("input_tokens"), kw.get("output_tokens"),
+         kw.get("cache_write_tokens"), kw.get("cache_read_tokens"), kw.get("cost")),
+    )
+
+
+def generation_spend(con: sqlite3.Connection, days: int = 30) -> float:
+    row = con.execute(
+        """SELECT COALESCE(SUM(cost), 0) AS spent FROM generations
+           WHERE julianday('now') - julianday(at) <= ?""", (days,)
+    ).fetchone()
+    return float(row["spent"])
+
+
+def set_site_dir(con: sqlite3.Connection, place_id: str, path: str) -> None:
+    con.execute("UPDATE leads SET site_dir=? WHERE place_id=?", (path, place_id))
 
 
 def spend_since(con: sqlite3.Connection, days: int = 30) -> float:

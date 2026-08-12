@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "partials/plate.html" import call_plate with context %}
+
+{% block hero %}
+<section class="hero">
+  <div class="shell split">
+    <div class="reveal">
+      <p class="eyebrow">{{ lead.category or 'Local trade' }}{% if city %} · {{ city }}{% endif %}</p>
+      <h1 class="hero-title">{{ c.hero_headline }}</h1>
+      <p class="hero-sub">{{ c.hero_sub }}</p>
+      <div class="hero-actions">
+        {% if phone_href %}
+        <a class="btn btn-primary" href="tel:{{ phone_href }}">Call {{ phone_display }}</a>
+        {% endif %}
+        <a class="btn btn-ghost" href="#services">See what we do</a>
+      </div>
+    </div>
+    {% if phone_href %}
+    <div class="reveal reveal-2 hero-plate">
+      {{ call_plate('Call') }}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block services %}
+<section class="section" id="services">
+  <div class="shell">
+    <p class="eyebrow">What we do</p>
+    <h2 class="h2">The work, plainly</h2>
+    <div class="cards">
+      {% for service in c.services %}
+      <div class="card">
+        <span class="card-index">{{ '%02d'|format(loop.index) }}</span>
+        <h3 class="card-name">{{ service.name }}</h3>
+        <p class="card-copy">{{ service.description }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+/* Trade: the plate sits beside the headline and is impossible to miss. */
+.hero-plate { align-self: center; }
+@media (min-width: 760px) { .hero .split { align-items: center; } }
+{% endblock %}

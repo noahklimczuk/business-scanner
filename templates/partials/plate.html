@@ -1,0 +1,22 @@
+{# The signature element, shared by all three templates so it can never drift.
+   It is a phone number the size of a headline inside a bordered plate — the
+   visual language of a van door, and the only thing on the page that has to
+   work when someone is standing outside in the rain. #}
+{% macro call_plate(label) %}
+<a class="plate" href="tel:{{ phone_href }}">
+  <span class="plate-label"><span>{{ label }}</span><span>{{ city or 'Local' }}</span></span>
+  <span class="plate-number">{{ phone_display }}</span>
+  <span class="plate-foot">
+    {% if days %}
+    <span class="pill" data-openstate hidden>
+      <span class="pill-dot"></span><span data-openlabel>Hours</span>
+    </span>
+    {% endif %}
+    {% if hours_summary %}
+    <strong>{{ hours_summary }}</strong>
+    {% elif not days %}
+    <span>Tap to dial</span>
+    {% endif %}
+  </span>
+</a>
+{% endmacro %}

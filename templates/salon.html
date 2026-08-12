@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "partials/plate.html" import call_plate with context %}
+
+{% block hero %}
+<section class="hero">
+  <div class="shell">
+    <div class="reveal hero-lead">
+      <p class="eyebrow">{{ lead.category or 'Studio' }}{% if city %} · {{ city }}{% endif %}</p>
+      <h1 class="hero-title">{{ c.hero_headline }}</h1>
+      <p class="hero-sub">{{ c.hero_sub }}</p>
+      <div class="hero-actions">
+        {% if phone_href %}
+        <a class="btn btn-primary" href="tel:{{ phone_href }}">Book by phone</a>
+        {% endif %}
+        <a class="btn btn-ghost" href="#services">Services</a>
+      </div>
+    </div>
+    {% if phone_href %}
+    <div class="reveal reveal-2 hero-plate">
+      {{ call_plate('Appointments') }}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block services %}
+<section class="section" id="services">
+  <div class="shell">
+    <p class="eyebrow">Services</p>
+    <h2 class="h2">What we offer</h2>
+    <div class="stack">
+      {% for service in c.services %}
+      <div class="stack-row">
+        <h3 class="stack-name">{{ service.name }}</h3>
+        <p class="stack-copy">{{ service.description }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+/* Salon: more air, lighter display weight, softer corners. The plate is still
+   the loudest element — booking is still a phone call — but it sits below the
+   headline rather than competing with it. */
+.hero { padding-top: clamp(3rem, 9vw, 6rem); }
+.hero-lead { max-width: 48rem; }
+.hero-title { font-weight: 700; letter-spacing: -.025em; }
+.hero-plate { margin-top: 2.5rem; max-width: 24rem; }
+.section { padding: clamp(4rem, 10vw, 7rem) 0; }
+.stack-row:last-child { border-bottom: none; }
+{% endblock %}
