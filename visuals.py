@@ -44,10 +44,10 @@ def _trade(place_id: str, v: str) -> str:
         parts.append(
             f'<path d="M-40 {520 - lift:.0f} L320 {520 - lift - pitch:.0f} '
             f'L680 {520 - lift:.0f}" fill="none" stroke="var(--art-line)" '
-            f'stroke-width="{2 + i * 0.8:.1f}" stroke-linejoin="round" '
-            f'opacity="{0.10 + 0.13 * i:.2f}"/>')
+            f'stroke-width="{3 + i * 1.1:.1f}" stroke-linejoin="round" '
+            f'opacity="{0.26 + 0.14 * i:.2f}"/>')
     parts.append('<rect x="-40" y="520" width="720" height="160" '
-                 'fill="var(--art-fill)" opacity="0.10"/>')
+                 'fill="var(--art-fill)" opacity="0.14"/>')
     return "".join(parts)
 
 
@@ -58,14 +58,14 @@ def _food(place_id: str, v: str) -> str:
     for i, radius in enumerate((250, 196, 142, 88)):
         parts.append(
             f'<circle cx="{cx:.0f}" cy="360" r="{radius + _jitter(place_id, f"r{i}{v}", 26):.0f}" '
-            f'fill="none" stroke="var(--art-line)" stroke-width="{1.5 + i * 0.9:.1f}" '
-            f'opacity="{0.10 + 0.10 * i:.2f}"/>')
+            f'fill="none" stroke="var(--art-line)" stroke-width="{2.5 + i * 1.2:.1f}" '
+            f'opacity="{0.24 + 0.11 * i:.2f}"/>')
     for i in range(3):
         x = cx - 70 + i * 70 + _jitter(place_id, f"s{i}{v}", 34)
         parts.append(
             f'<path d="M{x:.0f} 210 C{x - 32:.0f} 150 {x + 32:.0f} 110 '
             f'{x:.0f} 46" fill="none" stroke="var(--art-line)" '
-            f'stroke-width="3" stroke-linecap="round" opacity="0.22"/>')
+            f'stroke-width="4" stroke-linecap="round" opacity="0.34"/>')
     return "".join(parts)
 
 
@@ -77,8 +77,8 @@ def _salon(place_id: str, v: str) -> str:
         parts.append(
             f'<path d="M{-40 + offset:.0f} 660 C{140 + offset:.0f} 430 '
             f'{60 + offset:.0f} 250 {300 + offset:.0f} -40" fill="none" '
-            f'stroke="var(--art-line)" stroke-width="{1.5 + i * 0.7:.1f}" '
-            f'stroke-linecap="round" opacity="{0.10 + 0.08 * i:.2f}"/>')
+            f'stroke="var(--art-line)" stroke-width="{2.5 + i * 1.0:.1f}" '
+            f'stroke-linecap="round" opacity="{0.22 + 0.09 * i:.2f}"/>')
     return "".join(parts)
 
 
@@ -112,7 +112,7 @@ def artwork(place_id: str, template: str, name: str = "", variant: int = 0) -> s
     monogram = (
         f'<text x="320" y="404" text-anchor="middle" font-size="248" '
         f'font-weight="700" letter-spacing="-12" fill="var(--art-fill)" '
-        f'opacity="0.10" font-family="-apple-system, BlinkMacSystemFont, '
+        f'opacity="0.16" font-family="-apple-system, BlinkMacSystemFont, '
         f'Segoe UI, sans-serif">{mark}</text>') if mark and variant == 0 else ""
     # Decorative slots repeat the same idea; only the first is worth announcing.
     described = (f'role="img" aria-label="{label} artwork"' if variant == 0

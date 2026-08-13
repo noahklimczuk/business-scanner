@@ -287,8 +287,14 @@ def build(
     lead["hours"] = jsonlib.loads(row["hours_json"]) if row["hours_json"] else None
     chosen = template or generate_mod.template_for(lead.get("category"))
 
-    saved = generate_mod.load_content(place_id)
+    try:
+        saved = generate_mod.load_content(place_id)
+    except generate_mod.ContentError as exc:
+        _fail(str(exc))
+        return
     content = (saved or {}).get("copy") if saved else None
+    verified = (saved or {}).get("verified_facts") or []
+    photos = (saved or {}).get("photos") or []
     usage = None
 
     if content is None or regenerate:
@@ -309,7 +315,8 @@ def build(
                 key = None
             with console.status("writing copy…"):
                 content, usage = generate_mod.write_copy(
-                    lead, city=cfg["business"].get("home_city", ""), api_key=key)
+                    lead, city=cfg["business"].get("home_city", ""), api_key=key,
+                    verified=(saved or {}).get("verified_facts"))
         except generate_mod.ContentError as exc:
             _fail(str(exc))
             return
@@ -323,6 +330,9 @@ def build(
             "cost_usd": round(usage.cost, 4),
             "facts": generate_mod.facts_for(
                 lead, cfg["business"].get("home_city", "")),
+            # Anything the owner tells you directly goes here; the fabrication
+            # check treats it as source data on the next build.
+            "verified_facts": (saved or {}).get("verified_facts", []),
             "copy": content,
         })
         db.record_generation(
@@ -334,8 +344,10 @@ def build(
         con.commit()
 
     try:
-        site = generate_mod.render(lead, content, template=chosen, preview=not launch,
-                                   operator=cfg["business"])
+        site = generate_mod.render(
+            lead, {**content, "verified_facts": verified, "photos": photos},
+            template=chosen, preview=not launch, operator=cfg["business"],
+            city_hint=cfg["business"].get("home_city", ""))
     except generate_mod.ContentError as exc:
         _fail(str(exc))
         return
@@ -344,7 +356,7 @@ def build(
     db.set_site_dir(con, place_id, generate_mod.site_dir(place_id))
     con.commit()
 
-    size = sum(os.path.getsize(p) for p in paths.values())
+    size, heaviest = generate_mod.weigh(place_id)
     t = Table(box=None, show_header=False, pad_edge=False)
     t.add_column(style="dim")
     t.add_column()
@@ -352,7 +364,11 @@ def build(
     t.add_row("template", chosen)
     t.add_row("accent", f"[bold]{site.palette['accent']}[/bold] "
                         f"[dim]hue {site.palette['hue']}[/dim]")
-    t.add_row("page", f"{paths['index.html']}  [dim]{size / 1024:.1f} KB[/dim]")
+    over = size > generate_mod.PAGE_BUDGET_BYTES
+    weight = (f"[red]{size / 1024:.0f} KB — over the "
+              f"{generate_mod.PAGE_BUDGET_BYTES // 1024} KB budget[/red]"
+              if over else f"[dim]{size / 1024:.1f} KB[/dim]")
+    t.add_row("page", f"{paths['index.html']}  {weight}")
     t.add_row("indexing", "[yellow]noindex + robots disallow[/yellow]" if not launch
                           else "[green]indexable[/green]")
     if usage:
@@ -362,7 +378,16 @@ def build(
     else:
         t.add_row("copy", "[dim]reused from content.json — free[/dim]")
     t.add_row("last 30 days", f"${db.generation_spend(con, 30):,.2f} on copy")
-    console.print(Panel(t, title="site built", border_style="green", expand=False))
+    console.print(Panel(t, title="site built",
+                        border_style="yellow" if over else "green", expand=False))
+
+    if over:
+        biggest = ", ".join(f"{n} {s / 1024:.0f}KB" for n, s in heaviest[:3])
+        console.print(
+            f"[yellow]![/yellow] This page is {size / 1024:.0f} KB. The target is "
+            f"under {generate_mod.PAGE_BUDGET_BYTES // 1024} KB on rural LTE, and "
+            f"the weight is in: {biggest}.\n  Resize the photos to about 1600px "
+            f"wide and re-run build — nothing else in the page comes close.")
     console.print(f"\n  open it: [bold]{paths['index.html']}[/bold]")
     console.print("  edit the words: [bold]"
                   f"{os.path.join(generate_mod.site_dir(place_id), 'content.json')}"
