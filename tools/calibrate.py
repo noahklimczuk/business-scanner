@@ -19,6 +19,20 @@ What this cannot tell you, and do not pretend otherwise:
   - whether Claude's copy at `effort: low` reads well. Different model.
   - what a site costs. Different pricing.
 
+What the first real run found, which is the argument for the whole file:
+`review()` returned zero findings on all four leads, and three of the four
+pages said "Rated 4.9 stars across 61 customer reviews". The model was
+following the prompt exactly — the rating was in the input, and nothing told it
+that was the one input it must not repeat. The rating is true, so no
+fabrication check was ever going to catch it; the problem is that it is Places
+content licensed for display inside our tool, and `_schema()` and `_facts()`
+already omit it for that reason while the copy path did not. Reading the code
+would not have found that. Reading four real drafts did, in about a minute.
+
+Which is why a run is not scored by the number of findings. Zero findings is
+the *ambiguous* result: it means either the check is working or the model
+happened to behave. The drafts have to be read.
+
 Usage
 -----
     export GEMINI_API_KEY=...            # free, no card: aistudio.google.com
@@ -36,6 +50,7 @@ import json
 import os
 import sys
 import textwrap
+import time
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -45,7 +60,11 @@ import requests                                          # noqa: E402
 import generate                                          # noqa: E402
 
 GEMINI_ROOT = "https://generativelanguage.googleapis.com/v1beta"
-GEMINI_DEFAULT = "gemini-2.5-flash"
+# An alias rather than a pinned version. Google retires named versions from new
+# keys while still listing them — `gemini-2.5-flash` was the original default
+# here and 404s with "no longer available to new users" on a key issued today,
+# even though /models still returns it. An alias cannot rot that way.
+GEMINI_DEFAULT = "gemini-flash-latest"
 TIMEOUT = 90
 
 # Synthetic, so no real business has speculative copy written about it during a
@@ -137,26 +156,41 @@ class Gemini:
                 if "generateContent" in m.get("supportedGenerationMethods", [])]
 
     def draft(self, system: str, facts: str) -> tuple[dict[str, Any], dict[str, int]]:
-        r = requests.post(
-            f"{GEMINI_ROOT}/models/{self.model}:generateContent",
-            params={"key": self.key},
-            json={
-                "system_instruction": {"parts": [{"text": system}]},
-                "contents": [{"role": "user", "parts": [{"text": facts}]}],
-                "generationConfig": {
-                    "responseMimeType": "application/json",
-                    "responseSchema": _gemini_schema(generate.CONTENT_SCHEMA),
-                    "maxOutputTokens": generate.MAX_TOKENS,
-                },
+        payload = {
+            "system_instruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": facts}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": _gemini_schema(generate.CONTENT_SCHEMA),
+                "maxOutputTokens": generate.MAX_TOKENS,
             },
-            timeout=TIMEOUT,
-        )
+        }
+        # The free tier throttles and the shared models go busy. Those are
+        # facts about Google's afternoon, not results, and losing a whole
+        # calibration run to one of them is the wrong outcome.
+        for attempt in range(4):
+            r = requests.post(f"{GEMINI_ROOT}/models/{self.model}:generateContent",
+                              params={"key": self.key}, json=payload, timeout=TIMEOUT)
+            if r.status_code not in (429, 500, 502, 503, 504):
+                break
+            if attempt < 3:
+                wait = 2 ** attempt * 3
+                print(f"    {r.status_code} from Gemini, retrying in {wait}s")
+                time.sleep(wait)
+
         if r.status_code == 404:
-            raise SystemExit(
-                f"Gemini has no model called '{self.model}'. Run with "
-                f"--list-models to see what this key can reach.")
+            # Quote Google rather than paraphrasing: a retired model and a
+            # misspelled one both 404, and only the body tells you which.
+            # --list-models is not the answer either — it happily lists models
+            # this key is not allowed to call.
+            detail = r.json().get("error", {}).get("message", r.text[:200])
+            raise SystemExit(f"Gemini refused model '{self.model}':\n  {detail}\n"
+                             f"Try --model {GEMINI_DEFAULT}.")
         if not r.ok:
-            raise SystemExit(f"Gemini returned {r.status_code}: {r.text[:300]}")
+            # RuntimeError, not SystemExit: run() skips this lead and carries
+            # on. Only an unusable *configuration* — a missing key, a model
+            # that does not exist — is worth ending the run over.
+            raise RuntimeError(f"Gemini returned {r.status_code}: {r.text[:200]}")
         body = r.json()
         try:
             text = body["candidates"][0]["content"]["parts"][0]["text"]
