@@ -13,9 +13,12 @@ from rich.table import Table
 
 import config
 import db
+import deploy
 import enrich as enrich_mod
 import generate as generate_mod
+import pitch
 import prospect
+import qr as qr_mod
 import search
 
 app = typer.Typer(add_completion=False, no_args_is_help=True,
@@ -603,6 +606,219 @@ def stale(
     con.commit()
     console.print(f"[green]Purged Google content from {n} leads.[/green] "
                   "Re-scan the area to refill them.")
+    con.close()
+
+
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — preview, pitch, and the record of who has been visited
+# ---------------------------------------------------------------------------
+def _lead_for(con, place_id: str) -> dict:
+    row = db.get(con, place_id)
+    if not row:
+        _fail(f"No lead with place_id {place_id}. Try: leadsmith list")
+    lead = dict(row)
+    lead["hours"] = jsonlib.loads(row["hours_json"]) if row["hours_json"] else None
+    return lead
+
+
+@app.command()
+def preview(
+    place_id: str,
+    project: Optional[str] = typer.Option(None, "--project",
+                                          help="Cloudflare Pages project. "
+                                               f"Default: {deploy.DEFAULT_PROJECT}"),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Show exactly what would go public. Uploads nothing."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation."),
+    plain: bool = typer.Option(False, "--plain", help="QR without ANSI colour."),
+) -> None:
+    """Put this lead's site on a private URL and print a QR code for it.
+
+    The URL is real and public — anyone who has it can open it. It carries the
+    business's name before they have agreed to anything, which is why the page
+    is noindex, why robots.txt disallows everything, and why this asks first.
+    """
+    con = db.connect()
+    lead = _lead_for(con, place_id)
+    site = generate_mod.site_dir(place_id)
+
+    problems = deploy.preflight(site)
+    if problems:
+        _fail("This site is not safe to publish:\n"
+              + "\n".join(f"  - {p}" for p in problems))
+
+    try:
+        target = deploy.project_for(project)
+    except deploy.DeployError as exc:
+        _fail(str(exc))
+        return
+
+    if not (yes or dry_run):
+        console.print(Panel(
+            f"[bold]{lead['name']}[/bold]\n{lead.get('address') or ''}\n\n"
+            f"A page carrying this business's name, address and phone number "
+            f"goes onto the public internet.\nIt will not be indexed, but the "
+            f"URL works for anyone who has it.",
+            title="about to publish", border_style="yellow", expand=False))
+        if not typer.confirm("Publish it?"):
+            console.print("nothing published.")
+            raise typer.Exit(0)
+
+    try:
+        result = deploy.deploy(site, target, dry_run=dry_run)
+    except deploy.DeployError as exc:
+        _fail(str(exc))
+        return
+
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("project", result.project)
+    t.add_row("publishing", f"{result.files} files, {result.bytes / 1024:.1f} KB "
+                            f"[dim]{', '.join(result.published)}[/dim]")
+    if result.withheld:
+        t.add_row("kept back", f"[dim]{', '.join(result.withheld)}[/dim]")
+
+    if result.dry_run:
+        t.add_row("url", "[dim]nothing uploaded — dry run[/dim]")
+        console.print(Panel(t, title="preview plan", border_style="cyan", expand=False))
+        con.close()
+        return
+
+    t.add_row("url", f"[bold]{result.url}[/bold]")
+    console.print(Panel(t, title="preview published", border_style="green", expand=False))
+
+    db.set_preview(con, place_id, result.url, result.project)
+    con.commit()
+
+    try:
+        console.print()
+        console.print(qr_mod.for_terminal(result.url, colour=not plain))
+    except qr_mod.QRUnavailable as exc:
+        # The URL is printed below regardless. A missing QR is an
+        # inconvenience at the door, not a reason to fail a deploy that has
+        # already happened.
+        console.print(f"[dim]{exc}[/dim]")
+
+    console.print(f"\n  [bold]{result.url}[/bold]")
+    console.print(f"  leave-behind: [bold]leadsmith leavebehind {place_id}[/bold]")
+    console.print(f"  take it down: [bold]leadsmith unpreview {place_id}[/bold]")
+    con.close()
+
+
+@app.command()
+def unpreview(place_id: str,
+              yes: bool = typer.Option(False, "--yes", "-y")) -> None:
+    """Delete this lead's preview deployment and forget the URL."""
+    con = db.connect()
+    lead = _lead_for(con, place_id)
+    url = lead.get("preview_url")
+    if not url:
+        _fail(f"{lead['name']} has no preview recorded.")
+        return
+
+    if not yes and not typer.confirm(f"Take down {url}?"):
+        raise typer.Exit(0)
+    try:
+        deleted = deploy.take_down(lead.get("preview_project")
+                                   or deploy.DEFAULT_PROJECT, url)
+    except deploy.DeployError as exc:
+        _fail(str(exc))
+        return
+    db.set_preview(con, place_id, "")
+    con.commit()
+    console.print(f"[green]deleted[/green] deployment {deleted} — {url}")
+    con.close()
+
+
+@app.command()
+def leavebehind(
+    place_id: str,
+    open_after: bool = typer.Option(False, "--open", help="Open it in a browser."),
+) -> None:
+    """Write the one-page leave-behind to print and hand over.
+
+    Print it to PDF from the browser — that is deliberate. A PDF library would
+    be a heavy dependency and a font problem, and every machine can already
+    print a page.
+    """
+    con = db.connect()
+    lead = _lead_for(con, place_id)
+
+    try:
+        saved = generate_mod.load_content(place_id)
+    except generate_mod.ContentError as exc:
+        _fail(str(exc))
+        return
+    if not saved or not saved.get("copy"):
+        _fail(f"No copy for {lead['name']} yet. Run: leadsmith build {place_id}")
+        return
+
+    cfg = config.load()
+    html = pitch.build(
+        lead, saved["copy"],
+        preview_url=lead.get("preview_url") or "",
+        density=db.market_density(con, lead.get("category")),
+        operator=cfg.get("business", {}),
+        pricing=cfg.get("pricing"),
+    )
+    path = pitch.write(place_id, html)
+
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("page", path)
+    density = pitch.density_line(lead, db.market_density(con, lead.get("category")))
+    t.add_row("the line", density or "[dim]not enough of this trade scanned yet[/dim]")
+    t.add_row("preview", lead.get("preview_url") or
+                         "[yellow]none — run `leadsmith preview` first[/yellow]")
+    console.print(Panel(t, title="leave-behind", border_style="green", expand=False))
+    console.print("\n  open it, then print to PDF (one page, Letter).")
+
+    if open_after:
+        import webbrowser
+        webbrowser.open("file://" + os.path.abspath(path))
+    con.close()
+
+
+@app.command()
+def touch(
+    place_id: str,
+    outcome: str = typer.Argument(..., help=f"One of: {', '.join(db.OUTCOMES)}"),
+    channel: str = typer.Option("walk-in", "--channel", "-c",
+                                help=f"One of: {', '.join(db.CHANNELS)}"),
+    note: str = typer.Option("", "--note", "-n"),
+) -> None:
+    """Record an attempt and let the outcome move the lead.
+
+    Three attempts with nobody home closes it. That is the point: the scarce
+    resource is your afternoon, not leads.
+    """
+    con = db.connect()
+    lead = _lead_for(con, place_id)
+    before = lead["stage"]
+    try:
+        after = db.log_touch(con, place_id, channel, outcome, note)
+    except ValueError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+
+    moved = (f"[bold]{before}[/bold] → [bold]{after}[/bold]" if after != before
+             else f"still [bold]{before}[/bold]")
+    console.print(f"{lead['name']}: {outcome} · {moved}")
+
+    if after == "dead" and outcome == "no-answer":
+        console.print(f"[dim]  closed after {db.NO_ANSWER_LIMIT} attempts with "
+                      f"no answer.[/dim]")
+    elif outcome == "no-answer":
+        left = db.NO_ANSWER_LIMIT - db.consecutive_no_answers(con, place_id)
+        console.print(f"[dim]  {left} more no-answer(s) and this closes "
+                      f"automatically.[/dim]")
+    elif after == "interested":
+        console.print(f"[dim]  leave-behind: leadsmith leavebehind {place_id}[/dim]")
     con.close()
 
 
