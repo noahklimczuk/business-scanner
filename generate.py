@@ -529,8 +529,10 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
         stats=_facts(lead, city, summary),
         services_word=SERVICES_WORD.get(template, "Services"),
         photos=visuals.photos_from(content),
-        artwork=Markup(visuals.artwork(lead["place_id"], template,
-                                       lead.get("name", ""))),
+        # A callable, not one rendered SVG: each slot on the page asks for its
+        # own variant so the compositions differ.
+        make_art=lambda variant=0: Markup(visuals.artwork(
+            lead["place_id"], template, lead.get("name", ""), variant)),
         favicon=_favicon(palette, lead.get("name", "")),
         year=datetime.date.today().year,
         phone_display=phone_display,

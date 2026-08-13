@@ -235,7 +235,8 @@ def has_class(page, name):
 def block_after(css, opener):
     """The text of the {...} block that follows `opener`, brace-matched."""
     start = css.index(opener) + len(opener)
-    depth, i = 0, start
+    # The opener's own brace is already consumed, so we are one level deep.
+    depth, i = 1, start
     while i < len(css):
         if css[i] == "{":
             depth += 1
@@ -300,15 +301,27 @@ def test_every_scroll_animation_is_behind_a_support_and_motion_query(page):
     assert "animation-timeline" not in css.replace(motion, "")
 
 
-def test_no_element_starts_invisible():
+def test_a_browser_without_scroll_animation_sees_everything():
     # The classic failure of scroll-reveal: content defaults to opacity 0 and a
-    # browser that never fires the animation shows a blank page. Only keyframes
-    # may mention a zero opacity.
+    # browser that never runs the animation shows a blank page. No rule may set
+    # a zero opacity — the only zero lives in a @keyframes `from`, which is
+    # unreachable unless animation-timeline is supported.
     css = css_of(html_for())
     outside_keyframes = re.sub(r"@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}",
                                "", css, flags=re.S)
     assert not re.search(r"opacity:\s*0\s*[;}]", outside_keyframes)
     assert not re.search(r"visibility:\s*hidden", outside_keyframes)
+
+
+def test_printing_disables_the_reveals():
+    # In a browser that *does* support it, a scroll-driven reveal holds its
+    # `from` state until scrolled into view — so an unscrolled print or PDF
+    # capture would come out blank below the first screen. Phase 4's
+    # leave-behind depends on this.
+    css = css_of(html_for())
+    print_block = block_after(css, "@media print {")
+    assert re.search(r"\.rise[^{]*\{[^}]*animation:\s*none", print_block)
+    assert re.search(r"\.rise[^{]*\{[^}]*opacity:\s*1", print_block)
 
 
 def test_motion_is_css_only_and_adds_no_javascript(page):
@@ -342,3 +355,19 @@ def test_each_trade_gets_geometry_from_its_own_world():
     salon = visuals.artwork("p", "salon", "X")
     assert "<circle" in food and "<circle" not in trade      # plates vs rooflines
     assert trade != salon != food
+
+
+def test_every_image_slot_on_a_page_gets_its_own_composition(page):
+    # Repeating one composition down the page reads as a copy-paste mistake
+    # rather than a design.
+    svgs = re.findall(r"<svg class=\"art-svg\".*?</svg>", page, re.S)
+    assert len(svgs) >= 4                       # hero, stage, three cards
+    assert len(set(svgs)) == len(svgs)
+
+
+def test_only_the_first_artwork_carries_the_monogram_and_a_label(page):
+    svgs = re.findall(r"<svg class=\"art-svg\".*?</svg>", page, re.S)
+    assert svgs[0].count("aria-label=") == 1
+    for decorative in svgs[1:]:
+        assert 'aria-hidden="true"' in decorative
+        assert "<text" not in decorative        # the initials would repeat

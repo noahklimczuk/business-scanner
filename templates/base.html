@@ -100,8 +100,8 @@
     <div class="cards rise" style="margin-top:1.75rem">
       {% for point in c.why_us %}
       <div class="card">
-        <div class="art-panel" style="aspect-ratio:5/2;margin-bottom:1.35rem" aria-hidden="true">
-          {{ artwork }}
+        <div class="art-panel" style="aspect-ratio:5/2;margin-bottom:1.35rem">
+          {{ make_art(loop.index + 1) }}
         </div>
         <p class="card-name">{{ point }}</p>
       </div>

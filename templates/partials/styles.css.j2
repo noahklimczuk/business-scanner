@@ -303,4 +303,9 @@ a { color: var(--accent-ink); }
   .nav, .callbar { position: static; }
   .callbar, .art-panel { display: none; }
   .on-night { background: #fff; color: #000; }
+  /* A scroll-driven reveal holds its `from` state until its range is entered,
+     so anything below the fold is mid-animation at opacity 0. Print and PDF
+     capture never scroll — without this, the leave-behind comes out blank
+     below the first screen. */
+  .rise, .rise-now, .drift { animation: none !important; opacity: 1 !important; transform: none !important; }
 }
