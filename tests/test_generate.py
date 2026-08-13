@@ -153,9 +153,52 @@ def test_the_facts_the_model_sees_never_include_a_website_or_place_id():
     assert "Monday: 8am – 5pm" in facts
 
 
-def test_a_thin_listing_does_not_hand_the_model_a_rating_to_lean_on():
-    facts = generate.facts_for({**LEAD, "review_count": 2}, "Newmarket, ON")
-    assert "rating" not in facts.lower()
+def test_no_listing_hands_the_model_a_rating_to_lean_on():
+    # A calibration run against a live model is what turned this up: given the
+    # rating in the input, it put "Rated 4.9 stars across 61 customer reviews"
+    # on three pages out of four — following the prompt exactly, because
+    # nothing said the rating was the one input that may not be repeated.
+    # The fix is not to instruct harder; it is to stop sending it.
+    for lead in (LEAD, {**LEAD, "review_count": 2},
+                 {**LEAD, "rating": 4.9, "review_count": 400}):
+        facts = generate.facts_for(lead, "Newmarket, ON").lower()
+        assert "rating" not in facts
+        assert "review" not in facts
+        assert "4.7" not in facts
+
+
+@pytest.mark.parametrize("claim", [
+    "Rated 4.9 stars across 61 customer reviews.",
+    "A 4.7-star rating from local homeowners.",
+    "We are rated 4.5 by our customers.",
+    "Scoring 4.7/5 on Google.",
+    "Trusted by 212 reviews.",
+    "84 customer reviews and counting.",
+])
+def test_googles_rating_cannot_be_republished_as_the_clients_own_copy(claim):
+    # Not a question of truth — the rating is true. It is Places content,
+    # licensed for display inside our tool, and the schema builder and the
+    # stats strip already leave it off the page for exactly this reason. The
+    # copy was the third door and the only one a model can walk through alone.
+    issues = generate.review(copy_with(hero_sub=claim), SOURCE)
+    assert issues, claim
+    assert any("rating or review count" in i for i in issues), issues
+
+
+def test_a_business_actually_called_five_star_is_not_caught_by_that():
+    lead = {**LEAD, "name": "5 Star Roofing"}
+    source = generate.source_text(lead)
+    content = copy_with(meta_title="5 Star Roofing — Newmarket")
+    assert not [i for i in generate.review(content, source)
+                if "rating or review count" in i]
+
+
+def test_ordinary_copy_about_reviews_is_left_alone():
+    # The rule is about republishing the number, not about the word.
+    for fine in ("Read what your neighbours say about our work.",
+                 "We will review the roof with you before we start."):
+        assert not [i for i in generate.review(copy_with(hero_sub=fine), SOURCE)
+                    if "rating or review count" in i]
 
 
 # ---------------------------------------------------------------------------
