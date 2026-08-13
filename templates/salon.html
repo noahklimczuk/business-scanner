@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "partials/hero.html" import art, hero_actions with context %}
+
+{% block hero %}
+<section class="hero">
+  <div class="shell hero-copy">
+    <p class="eyebrow rise-now">{{ lead.category or 'Studio' }}{% if city %} · {{ city }}{% endif %}</p>
+    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+    {{ hero_actions('Book by phone') }}
+  </div>
+  <div class="shell-wide">
+    {{ art(0) }}
+  </div>
+</section>
+{% endblock %}
+
+{% block services %}
+<section class="section" id="services">
+  <div class="shell-wide stage">
+    <div>
+      <p class="eyebrow rise">Services</p>
+      <h2 class="headline rise">What we offer</h2>
+      <div class="stack rise" style="margin-top:2.75rem">
+        {% for service in c.services %}
+        <div class="stack-row">
+          <h3 class="stack-name">{{ service.name }}</h3>
+          <p class="stack-copy">{{ service.description }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="stage-visual">
+      {{ art(1, tall=True) }}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+/* Salon: the list leads and the visual follows, reversing the trade layout. */
+@media (min-width: 900px) { .stage-visual { top: 7.5rem; } }
+{% endblock %}

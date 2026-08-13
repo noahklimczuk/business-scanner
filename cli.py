@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json as jsonlib
+import os
 from typing import Optional
 
 import typer
@@ -13,6 +14,7 @@ from rich.table import Table
 import config
 import db
 import enrich as enrich_mod
+import generate as generate_mod
 import prospect
 import search
 
@@ -246,6 +248,125 @@ def enrich(
                       "[bold]leadsmith consent[/bold]:")
         for url in res.manual_queries:
             console.print(f"  {url}")
+    con.close()
+
+
+# ---------------------------------------------------------------------------
+@app.command()
+def build(
+    place_id: str,
+    regenerate: bool = typer.Option(False, "--regenerate",
+                                    help="Write new copy. Costs money; a plain "
+                                         "build re-renders the saved copy free."),
+    template: Optional[str] = typer.Option(None, "--template",
+                                           help=f"Force one of: "
+                                                f"{', '.join(generate_mod.TEMPLATES)}"),
+    launch: bool = typer.Option(False, "--launch",
+                                help="Drop the noindex. Only after they have said yes."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the spend confirmation."),
+) -> None:
+    """Build the website for one lead into sites/<place_id>/.
+
+    Copy is written once and cached in content.json. Edit that file and re-run
+    this command to change wording — there is no CMS and there is not going to
+    be one.
+    """
+    try:
+        cfg = config.load()
+    except config.ConfigError as exc:
+        _fail(str(exc))
+        return
+
+    con = db.connect()
+    row = db.get(con, place_id)
+    if not row:
+        _fail(f"No lead with place_id {place_id}. Try: leadsmith list")
+        return
+
+    lead = dict(row)
+    lead["hours"] = jsonlib.loads(row["hours_json"]) if row["hours_json"] else None
+    chosen = template or generate_mod.template_for(lead.get("category"))
+
+    saved = generate_mod.load_content(place_id)
+    content = (saved or {}).get("copy") if saved else None
+    usage = None
+
+    if content is None or regenerate:
+        estimate = 0.03
+        console.print(Panel(
+            f"Claude writes the copy for [bold]{lead['name']}[/bold]\n"
+            f"estimated spend: [bold]${estimate:,.2f} USD[/bold] "
+            f"[dim]({generate_mod.MODEL})[/dim]",
+            title="about to spend", border_style="cyan", expand=False))
+        threshold = float(cfg["defaults"]["confirm_above_usd"])
+        if estimate > threshold and not yes:
+            if not typer.confirm("  Continue?", default=False):
+                console.print("[dim]cancelled[/dim]")
+                return
+        try:
+            key = (cfg.get("anthropic_api_key") or "").strip() or None
+            if key and key.startswith("PASTE_"):
+                key = None
+            with console.status("writing copy…"):
+                content, usage = generate_mod.write_copy(
+                    lead, city=cfg["business"].get("home_city", ""), api_key=key)
+        except generate_mod.ContentError as exc:
+            _fail(str(exc))
+            return
+
+        generate_mod.save_content(place_id, {
+            "version": generate_mod.CONTENT_VERSION,
+            "place_id": place_id,
+            "template": chosen,
+            "model": generate_mod.MODEL,
+            "generated_at": db.now(),
+            "cost_usd": round(usage.cost, 4),
+            "facts": generate_mod.facts_for(
+                lead, cfg["business"].get("home_city", "")),
+            "copy": content,
+        })
+        db.record_generation(
+            con, place_id, model=generate_mod.MODEL, template=chosen,
+            attempts=usage.attempts, input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+            cache_read_tokens=usage.cache_read_tokens, cost=usage.cost)
+        con.commit()
+
+    try:
+        site = generate_mod.render(lead, content, template=chosen, preview=not launch,
+                                   operator=cfg["business"])
+    except generate_mod.ContentError as exc:
+        _fail(str(exc))
+        return
+
+    paths = generate_mod.write_site(place_id, site)
+    db.set_site_dir(con, place_id, generate_mod.site_dir(place_id))
+    con.commit()
+
+    size = sum(os.path.getsize(p) for p in paths.values())
+    t = Table(box=None, show_header=False, pad_edge=False)
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("business", lead["name"])
+    t.add_row("template", chosen)
+    t.add_row("accent", f"[bold]{site.palette['accent']}[/bold] "
+                        f"[dim]hue {site.palette['hue']}[/dim]")
+    t.add_row("page", f"{paths['index.html']}  [dim]{size / 1024:.1f} KB[/dim]")
+    t.add_row("indexing", "[yellow]noindex + robots disallow[/yellow]" if not launch
+                          else "[green]indexable[/green]")
+    if usage:
+        t.add_row("copy", f"new · ${usage.cost:.3f} "
+                          f"[dim]{usage.attempts} attempt(s), "
+                          f"{usage.output_tokens:,} output tokens[/dim]")
+    else:
+        t.add_row("copy", "[dim]reused from content.json — free[/dim]")
+    t.add_row("last 30 days", f"${db.generation_spend(con, 30):,.2f} on copy")
+    console.print(Panel(t, title="site built", border_style="green", expand=False))
+    console.print(f"\n  open it: [bold]{paths['index.html']}[/bold]")
+    console.print("  edit the words: [bold]"
+                  f"{os.path.join(generate_mod.site_dir(place_id), 'content.json')}"
+                  "[/bold], then run build again")
     con.close()
 
 

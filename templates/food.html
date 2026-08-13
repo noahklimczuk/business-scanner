@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "partials/hero.html" import art, hero_actions with context %}
+
+{% block hero %}
+<section class="hero">
+  <div class="shell centre hero-copy">
+    <p class="eyebrow rise-now">{{ lead.category or 'Local kitchen' }}{% if city %} · {{ city }}{% endif %}</p>
+    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+    {{ hero_actions('Order by phone') }}
+  </div>
+  <div class="shell-wide">
+    {{ art(0) }}
+  </div>
+</section>
+{% endblock %}
+
+{% block services %}
+<section class="section" id="services">
+  <div class="shell centre">
+    <p class="eyebrow rise">On the menu</p>
+    <h2 class="headline rise">What we serve</h2>
+  </div>
+  <div class="shell-wide" style="margin-top:3rem">
+    {{ art(1) }}
+  </div>
+  <div class="shell">
+    <div class="menu rise" style="margin-top:3.5rem">
+      {% for service in c.services %}
+      <div class="menu-row">
+        <h3 class="menu-name">{{ service.name }}</h3>
+        <p class="menu-copy">{{ service.description }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

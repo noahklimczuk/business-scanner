@@ -1,5 +1,6 @@
 {
   "google_api_key": "PASTE_YOUR_PLACES_API_KEY_HERE",
+  "anthropic_api_key": "PASTE_YOUR_ANTHROPIC_API_KEY_HERE",
 
   "business": {
     "operator_name": "Your Name",
