@@ -15,6 +15,9 @@ dependencies = [
     "rich>=13.7",
     "phonenumbers>=8.13",
     "python-dotenv>=1.0",
+    # Terminal and print QR codes for the preview. Pure Python, no transitive
+    # dependencies, and imported lazily so every other command runs without it.
+    "segno>=1.5",
 ]
 
 [project.optional-dependencies]
@@ -25,8 +28,8 @@ leadsmith = "cli:app"
 
 [tool.setuptools]
 include-package-data = true
-py-modules = ["cli", "config", "db", "design", "enrich", "generate",
-              "hours", "prospect", "search", "visuals"]
+py-modules = ["cli", "config", "db", "deploy", "design", "enrich", "generate",
+              "hours", "pitch", "prospect", "qr", "search", "visuals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -86,7 +86,14 @@ CREATE TABLE IF NOT EXISTS leads (
     social_checked_at TEXT,
     enriched_at       TEXT,
     is_chain          INTEGER DEFAULT 0,
-    duplicate_of      TEXT
+    duplicate_of      TEXT,
+    -- Phase 4. `preview_url` is a real business's name on the public internet
+    -- before they have agreed to anything, so it is recorded rather than
+    -- remembered: it is what `unpreview` takes down and what the leave-behind
+    -- points a QR code at.
+    preview_url       TEXT,
+    preview_at        TEXT,
+    preview_project   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_score ON leads(score DESC);
@@ -185,6 +192,9 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("enriched_at", "TEXT"),
         ("is_chain", "INTEGER DEFAULT 0"),
         ("duplicate_of", "TEXT"),
+        ("preview_url", "TEXT"),
+        ("preview_at", "TEXT"),
+        ("preview_project", "TEXT"),
     ],
     "market": [],
     "scans": [],
@@ -286,14 +296,118 @@ def upsert_market(con: sqlite3.Connection, place: dict[str, Any]) -> None:
     )
 
 
+# How a touch happened. `preview` is not an attempt to reach anyone — it is the
+# record that a page carrying their name went onto the public internet, which
+# is worth having in the same timeline as the visits.
+CHANNELS = ["walk-in", "phone", "preview", "mail", "email", "other"]
+
+# What came of it. Deliberately short: a list of twenty outcomes is a list
+# nobody uses consistently, and the automatic rules below depend on the
+# operator picking the same word twice.
+OUTCOMES = {
+    "no-answer": "Nobody there, or nobody who could talk.",
+    "gatekeeper": "Spoke to someone who is not the decision maker.",
+    "callback": "Come back later — they said when, or they didn't.",
+    "interested": "Wants the site, or wants to think about it.",
+    "not-interested": "A no. Believe it the first time.",
+    "sold": "Paid, or committed to pay.",
+}
+
+# Three attempts with nobody home and the lead is closed. The scarce resource
+# is the operator's afternoon, not leads — a scan produces more than can ever
+# be worked, so the default has to be to move on rather than to persist.
+NO_ANSWER_LIMIT = 3
+
+_OUTCOME_STAGE = {
+    "gatekeeper": "contacted",
+    "callback": "contacted",
+    "interested": "interested",
+    "not-interested": "dead",
+    "sold": "sold",
+}
+
+
 def log_touch(con: sqlite3.Connection, place_id: str, channel: str,
-              outcome: str, note: str = "") -> None:
+              outcome: str, note: str = "") -> str:
+    """Record an attempt and move the lead to wherever the outcome puts it.
+
+    Returns the stage the lead ended up in, so the caller can tell the operator
+    what just happened to it rather than making them run `show` to find out.
+
+    The stage moves are here rather than in the CLI on purpose: a touch that
+    does not change the pipeline is a touch the operator has to remember to
+    follow up with a second command, and that is the step that gets skipped at
+    the eleventh door of the afternoon.
+    """
+    if outcome not in OUTCOMES:
+        raise ValueError(f"Unknown outcome: {outcome}. "
+                         f"Use one of {', '.join(OUTCOMES)}")
+    if channel not in CHANNELS:
+        raise ValueError(f"Unknown channel: {channel}. "
+                         f"Use one of {', '.join(CHANNELS)}")
+
     stamp = now()
     con.execute(
         "INSERT INTO touches (place_id, at, channel, outcome, note) VALUES (?,?,?,?,?)",
         (place_id, stamp, channel, outcome, note),
     )
     con.execute("UPDATE leads SET last_touch=? WHERE place_id=?", (stamp, place_id))
+
+    row = con.execute("SELECT stage FROM leads WHERE place_id=?",
+                      (place_id,)).fetchone()
+    if row is None:
+        return ""
+    stage = row["stage"]
+
+    # A closed lead stays closed. Logging a touch against something already
+    # sold or live is a note on an existing client, not a pipeline move.
+    if stage in ("sold", "live", "dead"):
+        if outcome == "sold" and stage == "dead":
+            set_stage(con, place_id, "sold")     # they changed their mind
+            return "sold"
+        return stage
+
+    target = _OUTCOME_STAGE.get(outcome)
+    if outcome == "no-answer" and consecutive_no_answers(con, place_id) >= NO_ANSWER_LIMIT:
+        target = "dead"
+        con.execute(
+            "UPDATE leads SET notes = TRIM(COALESCE(notes,'') || ?) WHERE place_id=?",
+            (f"\nClosed automatically after {NO_ANSWER_LIMIT} attempts with no "
+             f"answer ({stamp[:10]}).", place_id))
+    if target:
+        set_stage(con, place_id, target)
+        return target
+    # "no-answer" below the limit: they have been contacted, in the sense that
+    # the operator spent a trip on them.
+    if stage == "new":
+        set_stage(con, place_id, "queued")
+        return "queued"
+    return stage
+
+
+def consecutive_no_answers(con: sqlite3.Connection, place_id: str) -> int:
+    """No-answers since the last touch that was anything else.
+
+    Consecutive rather than total: someone who was interested in March and then
+    missed three times in June is a different lead from one who has never once
+    been in, and closing them on a lifetime tally would be wrong.
+    """
+    count = 0
+    for row in con.execute(
+            "SELECT outcome FROM touches WHERE place_id=? ORDER BY id DESC",
+            (place_id,)):
+        if row["outcome"] != "no-answer":
+            break
+        count += 1
+    return count
+
+
+def set_preview(con: sqlite3.Connection, place_id: str, url: str,
+                project: str = "") -> None:
+    con.execute(
+        "UPDATE leads SET preview_url=?, preview_at=?, preview_project=? "
+        "WHERE place_id=?", (url or None, now() if url else None,
+                             project or None, place_id))
 
 
 def set_stage(con: sqlite3.Connection, place_id: str, stage: str) -> None:

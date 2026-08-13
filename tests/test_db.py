@@ -61,10 +61,77 @@ def test_unknown_stage_is_rejected(con):
 
 def test_touch_updates_last_touch(con):
     db.upsert_lead(con, place())
-    db.log_touch(con, "p1", "phone", "no answer", "tried at 9am")
+    db.log_touch(con, "p1", "phone", "no-answer", "tried at 9am")
     row = db.get(con, "p1")
     assert row["last_touch"] is not None
-    assert db.touches(con, "p1")[0]["outcome"] == "no answer"
+    assert db.touches(con, "p1")[0]["outcome"] == "no-answer"
+
+
+@pytest.mark.parametrize("bad", [("phone", "maybe"), ("carrier pigeon", "sold")])
+def test_a_touch_with_an_invented_channel_or_outcome_is_refused(con, bad):
+    # The automatic rules depend on the operator picking the same word twice.
+    # A free-text outcome field is a field that says "no answer", "No Answer"
+    # and "nobody in" across three days, and then nothing ever closes.
+    db.upsert_lead(con, place())
+    with pytest.raises(ValueError):
+        db.log_touch(con, "p1", bad[0], bad[1])
+
+
+def test_three_no_answers_close_the_lead(con):
+    db.upsert_lead(con, place())
+    assert db.log_touch(con, "p1", "walk-in", "no-answer") == "queued"
+    assert db.log_touch(con, "p1", "walk-in", "no-answer") == "queued"
+    assert db.log_touch(con, "p1", "walk-in", "no-answer") == "dead"
+    assert db.get(con, "p1")["stage"] == "dead"
+    assert "Closed automatically" in db.get(con, "p1")["notes"]
+
+
+def test_the_no_answer_count_is_consecutive_not_lifetime(con):
+    # Someone who was interested in March and missed three times in June is a
+    # different lead from one who has never once been in.
+    db.upsert_lead(con, place())
+    db.log_touch(con, "p1", "walk-in", "no-answer")
+    db.log_touch(con, "p1", "walk-in", "no-answer")
+    db.log_touch(con, "p1", "phone", "callback")
+    assert db.consecutive_no_answers(con, "p1") == 0
+    db.log_touch(con, "p1", "walk-in", "no-answer")
+    db.log_touch(con, "p1", "walk-in", "no-answer")
+    assert db.get(con, "p1")["stage"] == "contacted"     # not closed yet
+
+
+@pytest.mark.parametrize("outcome,stage", [
+    ("gatekeeper", "contacted"), ("callback", "contacted"),
+    ("interested", "interested"), ("not-interested", "dead"), ("sold", "sold"),
+])
+def test_an_outcome_moves_the_lead_without_a_second_command(con, outcome, stage):
+    db.upsert_lead(con, place())
+    assert db.log_touch(con, "p1", "walk-in", outcome) == stage
+    assert db.get(con, "p1")["stage"] == stage
+
+
+def test_a_sold_lead_is_not_dragged_backwards_by_a_later_note(con):
+    db.upsert_lead(con, place())
+    db.log_touch(con, "p1", "walk-in", "sold")
+    db.log_touch(con, "p1", "phone", "no-answer")       # a support call, later
+    assert db.get(con, "p1")["stage"] == "sold"
+
+
+def test_a_dead_lead_can_still_come_back_if_they_buy(con):
+    db.upsert_lead(con, place())
+    db.log_touch(con, "p1", "walk-in", "not-interested")
+    assert db.get(con, "p1")["stage"] == "dead"
+    db.log_touch(con, "p1", "phone", "sold")
+    assert db.get(con, "p1")["stage"] == "sold"
+
+
+def test_the_preview_url_is_recorded_and_can_be_cleared(con):
+    db.upsert_lead(con, place())
+    db.set_preview(con, "p1", "https://abc123.leadsmith.pages.dev", "leadsmith")
+    row = db.get(con, "p1")
+    assert row["preview_url"].endswith(".pages.dev")
+    assert row["preview_at"] and row["preview_project"] == "leadsmith"
+    db.set_preview(con, "p1", "")
+    assert db.get(con, "p1")["preview_url"] is None
 
 
 def test_market_density_counts_websites(con):

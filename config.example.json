@@ -11,6 +11,14 @@
     "home_city": "Newmarket, ON"
   },
 
+  "pricing": {
+    "standard_setup": 1200,
+    "standard_monthly": 60,
+    "nmd_setup": 0,
+    "nmd_monthly": 149,
+    "term_months": 12
+  },
+
   "defaults": {
     "radius_km": 10,
     "cell_m": 900,
