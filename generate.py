@@ -113,17 +113,23 @@ sentences. Concrete nouns. The voice of a competent tradesperson describing \
 their own work, not a marketing agency describing a client.
 
 The one rule that matters: every fact on the page must come from the input. \
-You are given a name, a category, a town, hours, and possibly a rating and \
-review count. That is all you know. You do not know how long they have been in \
-business, who owns it, whether they are licensed, insured, bonded, certified, \
-family-run, award-winning, or the best at anything. Do not imply any of it. \
-Do not write a founding year, a number of years of experience, a staff count, \
-a service radius, a guarantee, a warranty, a price, or a response time. If a \
-detail is not in the input, it does not go on the page.
+You are given a name, a category, a town and hours. That is all you know. You \
+do not know how long they have been in business, who owns it, how many people \
+work there, what equipment they own, whether they work on residential or \
+commercial jobs or both, or whether they are licensed, insured, bonded, \
+certified, family-run, award-winning, or the best at anything. Do not imply \
+any of it. Do not write a founding year, a number of years of experience, a \
+staff count, a service radius, a guarantee, a warranty, a price, a response \
+time, a star rating, or a number of reviews. If a detail is not in the input, \
+it does not go on the page.
 
 What you may infer is the category of work itself: a plumber does drain \
 clearing and fixture installation, a bakery sells bread. Describe the work, \
-not the company's history or credentials.
+not the company's history, its equipment or its credentials.
+
+When the input is thin — no hours, no address beyond the town — write less. A \
+short page that is entirely true is the goal; padding it out with plausible \
+detail about how they work is the failure this rule exists to prevent.
 
 Banned because they are either unverifiable or make the page sound generated: \
 best, premier, leading, top-rated, number one, trusted, reliable, dedicated, \
@@ -140,7 +146,21 @@ Return only the JSON object."""
 
 
 def facts_for(lead: dict[str, Any], city: str = "") -> str:
-    """The only thing the model gets to know."""
+    """The only thing the model gets to know.
+
+    The Google rating and review count are deliberately absent, and this is the
+    one place that decision has to be enforced rather than merely intended.
+    A real calibration run against a live model put "Rated 4.9 stars across 61
+    customer reviews" on three pages out of four — following instructions
+    exactly, because the rating was in the input and nothing said it was the
+    one input that may not be repeated.
+
+    It is not a question of truth; the rating is true. It is Places content,
+    licensed for display inside our tool, and republishing it as the client's
+    own website copy is a different thing from showing it to the operator. The
+    schema builder and the stats strip already leave it out for the same
+    reason. The copy path was the hole.
+    """
     parsed = hours_mod.parse(lead.get("hours"))
     lines = [
         f"Business name: {lead.get('name')}",
@@ -149,9 +169,6 @@ def facts_for(lead: dict[str, Any], city: str = "") -> str:
     ]
     if city:
         lines.append(f"Town: {city}")
-    if lead.get("rating") and (lead.get("review_count") or 0) >= 5:
-        lines.append(f"Google rating: {lead['rating']} from "
-                     f"{lead['review_count']} reviews")
     if parsed:
         lines.append("Opening hours:")
         lines += [f"  {d['day']}: {d['label']}" for d in parsed]
@@ -198,6 +215,19 @@ _ABOUT_THE_BUSINESS = re.compile(
 # an activity is describing how long they have been at it, whatever else the
 # sentence says. "lasts 20 years in this climate" is not.
 _DURATION_TAIL = re.compile(r"^\s*(?:of\b|[a-z]+ing\b)", re.I)
+
+# Google's rating, restated as the client's own website copy. Unlike everything
+# else in this check the problem is not that it might be false — it is true —
+# but that it is Places content and we are only licensed to display it inside
+# our own tool. `_schema()` and `_facts()` already leave it off the page; the
+# copy is the third way it can get there, and the only one a model can walk
+# into on its own.
+_RATING_CLAIM = re.compile(
+    r"\b\d(?:\.\d)?\s*[-‑– ]?stars?\b"          # "4.7 stars", "5-star"
+    r"|\brated\s+\d(?:\.\d)?"                             # "Rated 4.5"
+    r"|\b\d(?:\.\d)?\s*/\s*5\b"                           # "4.7/5"
+    r"|\b\d+\s+(?:\w+\s+)?reviews?\b",                    # "212 customer reviews"
+    re.I)
 
 # Claims about standing, credentials or promises. Allowed only if the words are
 # already in the source data — a business literally called "Newmarket Licensed
@@ -313,6 +343,17 @@ def review(content: dict[str, Any], source: str) -> list[str]:
         for term in SUPERLATIVES:
             if _mentions(low, term):
                 issues.append(f"{field_name} uses '{term}'")
+
+        for match in _RATING_CLAIM.finditer(text):
+            # A business genuinely called "5 Star Roofing" is not restating
+            # Google's rating when its own name appears in the copy. The name
+            # is in the source; the rating no longer is.
+            if match.group().lower() in source:
+                continue
+            issues.append(
+                f"{field_name} republishes a Google rating or review count "
+                f"({match.group().strip()!r}). It is true and it is still not "
+                f"ours to put on their website.")
 
     return issues
 
