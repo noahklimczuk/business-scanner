@@ -40,9 +40,9 @@ def test_yellow_is_the_hard_case_and_still_passes():
 def test_hex_output_is_well_formed():
     palette = design.palette_for("ChIJexample")
     for key, value in palette.items():
-        if key == "hue":
+        if key in ("hue", "chrome_alpha"):       # numbers, not colours
             continue
-        assert len(value) == 7 and value.startswith("#")
+        assert len(value) == 7 and value.startswith("#"), key
         int(value[1:], 16)
 
 

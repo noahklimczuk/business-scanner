@@ -317,6 +317,61 @@ def review(content: dict[str, Any], source: str) -> list[str]:
     return issues
 
 
+# Alt text that technically exists and tells a blind visitor nothing. A
+# screen reader already announces the element as an image, so "image" and
+# "photo" are pure noise, and a filename is worse than silence.
+_USELESS_ALT = {"image", "photo", "picture", "img", "graphic", "logo", "photo of",
+                "image of", "picture of", "untitled", "alt", "alt text", "n/a"}
+
+
+def accessibility_issues(content: dict[str, Any]) -> list[str]:
+    """Reasons this content cannot ship under WCAG 2.0 AA. Empty is a pass.
+
+    Separate from `review()` because it answers a different question — that one
+    asks whether the copy is *true*, this one asks whether the page is *usable*
+    — and because the fix is different: a fabrication means rewriting a
+    sentence, a missing alt means asking the owner what the photo shows.
+
+    Almost everything AA needs is settled in the templates and the palette,
+    where the operator cannot get it wrong. Alt text is the one thing that
+    cannot be: only the person who took the photograph knows what is in it. So
+    it is the only thing checked here, and it is checked hard, because Ontario
+    businesses carry the AODA obligation for what we hand them.
+    """
+    issues: list[str] = []
+    photos = content.get("photos")
+    if photos is None:
+        return issues
+    if not isinstance(photos, list):
+        return ["photos must be a list"]
+
+    for i, photo in enumerate(photos):
+        if not isinstance(photo, dict):
+            issues.append(f"photos[{i}] must be an object")
+            continue
+        src = str(photo.get("src") or "").strip()
+        if not src:
+            issues.append(f"photos[{i}] has no src")
+            continue
+        if photo.get("decorative"):
+            continue
+
+        alt = str(photo.get("alt") or "").strip()
+        if not alt:
+            issues.append(
+                f'photos[{i}] ("{src}") has no alt text. Write what a visitor '
+                f'who cannot see it would need — "New cedar shake roof on a '
+                f'century home" — or set "decorative": true if the picture '
+                f"carries nothing the words do not.")
+        elif alt.lower().rstrip(".") in _USELESS_ALT:
+            issues.append(f'photos[{i}] alt text is "{alt}", which tells a '
+                          f"screen reader nothing it did not already say.")
+        elif alt.strip().lower() == src.lower():
+            issues.append(f'photos[{i}] alt text is just the filename ("{src}").')
+
+    return issues
+
+
 # ---------------------------------------------------------------------------
 # The API call
 # ---------------------------------------------------------------------------
@@ -607,6 +662,19 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
               "and run build again. If the claim is true and the owner told you "
               "so, add it to \"verified_facts\" in that file and it will be "
               "allowed."
+        )
+
+    # Ontario's AODA makes WCAG 2.0 AA a legal obligation for these businesses'
+    # websites, so this is a build failure rather than a warning. A warning is
+    # something an operator working through forty sites scrolls past.
+    barriers = accessibility_issues(content)
+    if barriers:
+        raise ContentError(
+            "This page would not meet WCAG 2.0 AA, which Ontario's AODA "
+            "requires of the client's website:\n"
+            + "\n".join(f"  - {b}" for b in barriers[:12])
+            + f"\n\nEdit {os.path.join(site_dir(lead['place_id']), 'content.json')} "
+              "and run build again."
         )
 
     palette = design.palette_for(lead["place_id"], template)

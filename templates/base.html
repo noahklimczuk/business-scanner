@@ -45,8 +45,10 @@
     </nav>
     <div class="nav-right">
       {% if days %}
+      {# The dot is decoration and the word carries the state, so open vs
+         closed is never signalled by colour alone (1.4.1). #}
       <span class="pill" data-openstate hidden>
-        <span class="pill-dot"></span><span data-openlabel>Hours</span>
+        <span class="pill-dot" aria-hidden="true"></span><span data-openlabel>Hours</span>
       </span>
       {% endif %}
       {% if phone_href %}
@@ -56,28 +58,35 @@
   </div>
 </header>
 
-<main id="main">
+{# tabindex="-1" so the skip link actually moves focus here. Without it WebKit
+   scrolls but leaves focus on the link, and the next Tab goes straight back
+   into the nav the visitor was trying to skip (2.4.1). #}
+<main id="main" tabindex="-1">
 {% block hero %}{% endblock %}
 
 {% if stats %}
-<section class="section-tight">
-  <div class="shell stats rise">
+<section class="section-tight" aria-label="At a glance">
+  {# A list of pairs, marked up as pairs: the number is meaningless without its
+     label and a screen reader has no other way to know they belong together
+     (1.3.1). The value is read second because dt comes first; the CSS reverses
+     the two visually. #}
+  <dl class="shell stats rise">
     {% for stat in stats %}
-    <div>
-      <p class="stat-value">{{ stat.value }}</p>
-      <p class="stat-label">{{ stat.label }}</p>
+    <div class="stat">
+      <dt class="stat-label">{{ stat.label }}</dt>
+      <dd class="stat-value">{{ stat.value }}</dd>
     </div>
     {% endfor %}
-  </div>
+  </dl>
 </section>
 {% endif %}
 
 {% block services %}{% endblock %}
 
-<section class="section on-night" id="about">
+<section class="section on-night" id="about" aria-labelledby="about-h">
   <div class="shell centre">
     <p class="eyebrow rise">About</p>
-    <h2 class="headline rise">{{ lead.name }}</h2>
+    <h2 class="headline rise" id="about-h">{{ lead.name }}</h2>
     <div class="rise">
       {% for para in c.about %}
       <p class="lede measure-wide" style="margin-top:1.4rem">{{ para }}</p>
@@ -94,26 +103,31 @@
   </div>
 </section>
 
-<section class="section">
+{# This section had an eyebrow and no heading at all, which left anyone moving
+   through the page by headings with three cards and nothing saying what they
+   were (1.3.1, 2.4.6). The eyebrow *is* the heading — same words, same place,
+   same styling, so nothing changes on screen and the outline is complete.
+   role="list" because Safari drops list semantics when list-style is none. #}
+<section class="section" id="why" aria-labelledby="why-h">
   <div class="shell">
-    <p class="eyebrow rise">Why call us</p>
-    <div class="cards rise" style="margin-top:1.75rem">
+    <h2 class="eyebrow rise" id="why-h">Why call us</h2>
+    <ul class="cards rise" role="list" style="margin-top:1.75rem">
       {% for point in c.why_us %}
-      <div class="card">
+      <li class="card">
         <div class="art-panel" style="aspect-ratio:5/2;margin-bottom:1.35rem">
           {{ make_art(loop.index + 1) }}
         </div>
         <p class="card-name">{{ point }}</p>
-      </div>
+      </li>
       {% endfor %}
-    </div>
+    </ul>
   </div>
 </section>
 
-<section class="section on-night" id="contact">
+<section class="section on-night" id="contact" aria-labelledby="contact-h">
   <div class="shell">
     <p class="eyebrow rise">Contact</p>
-    <h2 class="headline measure rise">{{ c.cta_line }}</h2>
+    <h2 class="headline measure rise" id="contact-h">{{ c.cta_line }}</h2>
     <div class="contact-grid">
       <div class="rise">
         {% if phone_href %}
@@ -150,6 +164,9 @@
   <div class="shell footer-in fine">
     <span>&copy; {{ year }} {{ lead.name }}</span>
     {% if lead.address %}<span>{{ lead.address }}</span>{% endif %}
+    {# Underlined by the base `a` rule. It sits in a row of plain spans, so
+       without the underline its colour is the only thing marking it as a link
+       — which is exactly what 1.4.1 forbids. #}
     {% if phone_href %}<a href="tel:{{ phone_href }}">{{ phone_display }}</a>{% endif %}
   </div>
 </footer>
@@ -213,7 +230,18 @@
   });
 
   var row = document.querySelector('.hours-table [data-day="' + day + '"]');
-  if (row) row.classList.add('is-today');
+  if (row) {
+    row.classList.add('is-today');
+    /* Bold and a lighter grey are the visual marks; this is the one a screen
+       reader gets, so "today" is not carried by colour alone (1.4.1). */
+    var head = row.querySelector('th');
+    if (head) {
+      var note = document.createElement('span');
+      note.className = 'sr-only';
+      note.textContent = ' (today)';
+      head.appendChild(note);
+    }
+  }
 })();
 </script>
 {% endif %}
