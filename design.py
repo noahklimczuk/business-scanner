@@ -52,6 +52,15 @@ NIGHT_MUTED = "#A1A1A6"
 NIGHT_HAIRLINE = "#36363A"
 NIGHT_EDGE = "#4A4A4E"
 
+# Form errors (Phase 5). Fixed rather than derived from the accent: an error is
+# not a brand moment, and a business whose accent happens to be red would
+# otherwise have error text indistinguishable from its own headings. Both are
+# in audit() and asserted like every other pair — an error message nobody can
+# read is a worse failure than an unreadable heading, because it is the message
+# telling a customer why their enquiry did not send.
+DANGER = "#B3261E"
+NIGHT_DANGER = "#FF8A80"
+
 AA_TEXT = 4.5          # WCAG AA 1.4.3, body text
 AA_LARGE = 3.0         # WCAG AA 1.4.3, large text (>=24px, or >=18.66px bold)
 # Aim a little above the line rather than at it. A colour that computes to
@@ -240,6 +249,8 @@ def palette_for(place_id: str, template: str = "trade") -> dict[str, str]:
         "night_muted": NIGHT_MUTED,
         "night_hairline": NIGHT_HAIRLINE,
         "night_edge": NIGHT_EDGE,
+        "danger": DANGER,
+        "night_danger": NIGHT_DANGER,
         "chrome_alpha": f"{CHROME_ALPHA * 100:.0f}",
         "hue": f"{hue:.1f}",
     }
@@ -285,6 +296,12 @@ def audit(palette: dict[str, str]) -> dict[str, float]:
         "chrome_ink": contrast(palette["ink"], chrome),
         "chrome_muted_strong": contrast(palette["ink_muted_strong"], chrome),
         "chrome_accent_ink": contrast(palette["accent_ink"], chrome),
+        # form errors, on every surface a form can sit on
+        "danger_on_surface": contrast(palette["danger"], palette["surface"]),
+        "danger_on_sunk": contrast(palette["danger"], palette["surface_sunk"]),
+        "night_danger_on_night": contrast(palette["night_danger"], palette["night"]),
+        "night_danger_on_night_sunk": contrast(palette["night_danger"],
+                                               palette["night_sunk"]),
         # focus rings — 2.4.7 needs the ring to be *visible*, which is the same
         # measurement as text against the surface it lands on
         "focus_on_surface": contrast(palette["ink"], palette["surface"]),

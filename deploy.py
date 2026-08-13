@@ -281,3 +281,127 @@ def take_down(project: str, url: str, runner=subprocess.run) -> str:
             f"Could not delete deployment {deployment_id}:\n\n"
             + output.strip()[-800:])
     return deployment_id
+
+
+# ---------------------------------------------------------------------------
+# Launch. The mirror image of a preview, and the assertions invert with it.
+# ---------------------------------------------------------------------------
+def launch_preflight(site_dir: str, domain: str) -> list[str]:
+    """Everything wrong with launching this directory on `domain`.
+
+    `preflight()` refuses a page without a noindex. This refuses one *with*
+    it — the same read of the same bytes, asserting the opposite, because the
+    two commands want opposite things and the difference is invisible from the
+    filename. A launch that silently keeps the noindex is the worst outcome
+    available here: the client pays, the site is up, and Google never sees it.
+    Nobody notices for a month.
+    """
+    problems: list[str] = []
+    index = os.path.join(site_dir, "index.html")
+    robots = os.path.join(site_dir, "robots.txt")
+
+    if not os.path.exists(index):
+        return [f"No index.html in {site_dir}. Run: leadsmith build --launch"]
+
+    with open(index, encoding="utf-8") as fh:
+        html = fh.read()
+    if "noindex" in html:
+        problems.append(
+            "index.html still says noindex — this is the preview build. "
+            "Run `leadsmith build <place_id> --launch` first, or the site goes "
+            "live invisible to Google and nobody notices for a month.")
+    if os.path.exists(robots):
+        with open(robots, encoding="utf-8") as fh:
+            if "Disallow: /" in fh.read():
+                problems.append("robots.txt still disallows crawling.")
+
+    expected = f"https://{domain}"
+    if f'rel="canonical" href="{expected}"' not in html:
+        problems.append(
+            f"The canonical URL does not point at {expected}. Re-run build "
+            f"with --launch and the right --domain so the page agrees with "
+            f"where it is being served from.")
+
+    for src in re.findall(r'<img[^>]+src="([^":]+)"', html):
+        if not os.path.exists(os.path.join(site_dir, src)):
+            problems.append(f"index.html references {src}, which is missing.")
+    return problems
+
+
+def project_for_domain(domain: str) -> str:
+    """A Pages project per client, named after their domain.
+
+    Not one shared project: deployments, custom domains and rollbacks are all
+    scoped to a project, and putting thirty clients in one means a mistake on
+    any of them is a mistake on all of them.
+    """
+    stem = re.sub(r"[^a-z0-9-]+", "-", domain.strip().lower()).strip("-")
+    return project_for(stem[:58].strip("-"))
+
+
+def launch(site_dir: str, domain: str, project: str, *, dry_run: bool = False,
+           runner=subprocess.run) -> Deployment:
+    problems = launch_preflight(site_dir, domain)
+    if problems:
+        raise DeployError("This site is not ready to launch:\n"
+                          + "\n".join(f"  - {p}" for p in problems))
+
+    with tempfile.TemporaryDirectory(prefix="leadsmith-launch-") as staged:
+        published, withheld = stage(site_dir, staged)
+        if "index.html" not in published:
+            raise DeployError(f"Nothing publishable in {site_dir}.")
+        files, bytes_ = contents(staged)
+        if dry_run:
+            return Deployment(url=f"https://{domain}", project=project,
+                              files=files, bytes=bytes_, dry_run=True,
+                              published=published, withheld=withheld)
+
+        binary = _require_wrangler()
+        done = runner([binary, "pages", "deploy", staged,
+                       f"--project-name={project}", "--branch=main"],
+                      capture_output=True, text=True, timeout=TIMEOUT)
+        output = (done.stdout or "") + (done.stderr or "")
+        if done.returncode != 0:
+            raise DeployError(f"wrangler failed (exit {done.returncode}).\n\n"
+                              + output.strip()[-1200:])
+        return Deployment(url=f"https://{domain}", project=project, files=files,
+                          bytes=bytes_, published=published, withheld=withheld)
+
+
+def attach_domain(project: str, domain: str, runner=subprocess.run) -> str:
+    """Point a Pages project at the client's own domain.
+
+    Idempotent by necessity: this gets re-run when DNS was wrong the first
+    time, and Cloudflare's "already exists" is a success, not a failure.
+    """
+    binary = _require_wrangler()
+    done = runner([binary, "pages", "domain", "add", domain,
+                   f"--project-name={project}"],
+                  capture_output=True, text=True, timeout=TIMEOUT)
+    output = (done.stdout or "") + (done.stderr or "")
+    if done.returncode != 0 and "already" not in output.lower():
+        raise DeployError(f"Could not attach {domain} to {project}:\n\n"
+                          + output.strip()[-800:])
+    return output.strip()
+
+
+def dns_records(project: str, domain: str) -> list[dict[str, str]]:
+    """What the owner's registrar needs, in the words the registrar uses.
+
+    An apex domain cannot hold a CNAME in plain DNS, which is why the two rows
+    differ and why this is a table rather than one instruction. Registrars that
+    support CNAME flattening (Cloudflare's own among them) accept the CNAME at
+    the apex; the rest need the A records.
+    """
+    target = f"{project}.pages.dev"
+    apex = domain.count(".") == 1
+    if not apex:
+        host = domain.split(".")[0]
+        return [{"type": "CNAME", "name": host, "value": target,
+                 "note": "Proxy/orange-cloud on if your registrar is Cloudflare."}]
+    return [
+        {"type": "CNAME", "name": "@", "value": target,
+         "note": "If your registrar supports CNAME flattening (Cloudflare does), "
+                 "this row is all you need."},
+        {"type": "CNAME", "name": "www", "value": target, "note": ""},
+    ]

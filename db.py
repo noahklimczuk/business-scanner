@@ -93,7 +93,18 @@ CREATE TABLE IF NOT EXISTS leads (
     -- points a QR code at.
     preview_url       TEXT,
     preview_at        TEXT,
-    preview_project   TEXT
+    preview_project   TEXT,
+    -- Phase 5. A launched site is the client's actual web presence: it is
+    -- indexable, it is on their domain, and it is the thing that breaks at
+    -- 2am. `monitor` reads these.
+    domain            TEXT,
+    live_url          TEXT,
+    live_project      TEXT,
+    launched_at       TEXT,
+    form_enabled      INTEGER DEFAULT 0,
+    last_checked_at   TEXT,
+    last_check_ok     INTEGER,
+    last_check_note   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_score ON leads(score DESC);
@@ -195,6 +206,14 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("preview_url", "TEXT"),
         ("preview_at", "TEXT"),
         ("preview_project", "TEXT"),
+        ("domain", "TEXT"),
+        ("live_url", "TEXT"),
+        ("live_project", "TEXT"),
+        ("launched_at", "TEXT"),
+        ("form_enabled", "INTEGER DEFAULT 0"),
+        ("last_checked_at", "TEXT"),
+        ("last_check_ok", "INTEGER"),
+        ("last_check_note", "TEXT"),
     ],
     "market": [],
     "scans": [],
@@ -400,6 +419,34 @@ def consecutive_no_answers(con: sqlite3.Connection, place_id: str) -> int:
             break
         count += 1
     return count
+
+
+def set_live(con: sqlite3.Connection, place_id: str, *, domain: str,
+             url: str, project: str, form: bool = False) -> None:
+    """Record a launch and move the lead to `live`.
+
+    `live` rather than `sold`: sold is a promise, live is a running website
+    with the operator's name attached to whether it stays up.
+    """
+    con.execute(
+        """UPDATE leads SET domain=?, live_url=?, live_project=?, launched_at=?,
+           form_enabled=?, stage='live' WHERE place_id=?""",
+        (domain or None, url or None, project or None, now(),
+         1 if form else 0, place_id))
+
+
+def live_sites(con: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Everything `monitor` is responsible for."""
+    return con.execute(
+        "SELECT * FROM leads WHERE stage='live' AND live_url IS NOT NULL "
+        "ORDER BY name").fetchall()
+
+
+def record_check(con: sqlite3.Connection, place_id: str, ok: bool,
+                 note: str = "") -> None:
+    con.execute(
+        "UPDATE leads SET last_checked_at=?, last_check_ok=?, last_check_note=? "
+        "WHERE place_id=?", (now(), 1 if ok else 0, note or None, place_id))
 
 
 def set_preview(con: sqlite3.Connection, place_id: str, url: str,

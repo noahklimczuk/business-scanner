@@ -140,6 +140,13 @@
         </address>
         {% endif %}
       </div>
+      {% if contact_form %}
+      {# Only on launched sites: a preview has no Function behind it, and a
+         form that silently does nothing is worse than no form at all. #}
+      <div class="rise">
+        {% include "partials/contact-form.html" %}
+      </div>
+      {% endif %}
       {% if days %}
       <div class="rise">
         <table class="hours-table">

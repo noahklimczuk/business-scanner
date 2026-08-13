@@ -642,7 +642,8 @@ def dial_href(lead: dict[str, Any], region: str = "CA") -> str:
 def render(lead: dict[str, Any], content: dict[str, Any], *,
            template: Optional[str] = None, preview: bool = True,
            site_url: str = "", operator: Optional[dict[str, Any]] = None,
-           region: str = "CA", city_hint: str = "") -> Site:
+           region: str = "CA", city_hint: str = "",
+           contact_form: bool = False, turnstile_site_key: str = "") -> Site:
     template = template or template_for(lead.get("category"))
     if template not in TEMPLATES:
         raise ContentError(f"Unknown template '{template}'. "
@@ -707,6 +708,11 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
         map_url=map_link(lead),
         preview=preview,
         site_url=site_url,
+        # Only a launched site gets the form: the Pages Function that receives
+        # it is deployed with the launch, so on a preview the form would post
+        # into nothing and lose a real customer's enquiry.
+        contact_form=bool(contact_form) and not preview,
+        turnstile_site_key=turnstile_site_key,
         operator=operator or {},
         template_name=template,
     )
