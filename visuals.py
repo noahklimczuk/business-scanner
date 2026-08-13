@@ -98,6 +98,18 @@ def artwork(place_id: str, template: str, name: str = "", variant: int = 0) -> s
     so each slot reseeds the geometry — and only the first carries the
     monogram, which would otherwise repeat down the whole page.
 
+    Every slot is decorative and every slot says so. This used to give the
+    first one `role="img" aria-label="Halstead Roofing artwork"`, which is a
+    1.1.1 failure dressed up as compliance: the drawing carries no information
+    a sighted visitor gets, so announcing it just makes a screen reader read
+    the business name a fourth time before the copy starts. `aria-hidden` is
+    the correct treatment for decoration, and it is what makes the page quieter
+    rather than merely conformant. Real photography, when the owner supplies
+    it, is a different matter and carries real alt text.
+
+    `focusable="false"` because IE and old Edge put SVGs in the tab order,
+    which would otherwise add four dead stops to keyboard navigation (2.4.3).
+
     Colours come from CSS custom properties so the same markup works on the
     light page and inside a dark section. The result is marked safe by the
     caller, so anything interpolated here is escaped here: business names come
@@ -108,17 +120,14 @@ def artwork(place_id: str, template: str, name: str = "", variant: int = 0) -> s
     builder = _BUILDERS.get(template, _trade)
     salt = f"v{variant}"
     mark = htmllib.escape(initials(name), quote=True)
-    label = htmllib.escape(name or "", quote=True)
     monogram = (
         f'<text x="320" y="404" text-anchor="middle" font-size="248" '
         f'font-weight="700" letter-spacing="-12" fill="var(--art-fill)" '
         f'opacity="0.16" font-family="-apple-system, BlinkMacSystemFont, '
         f'Segoe UI, sans-serif">{mark}</text>') if mark and variant == 0 else ""
-    # Decorative slots repeat the same idea; only the first is worth announcing.
-    described = (f'role="img" aria-label="{label} artwork"' if variant == 0
-                 else 'role="presentation" aria-hidden="true"')
     return (
-        f'<svg class="art-svg" viewBox="0 0 {VIEWBOX} {VIEWBOX}" {described} '
+        f'<svg class="art-svg" viewBox="0 0 {VIEWBOX} {VIEWBOX}" '
+        f'role="presentation" aria-hidden="true" focusable="false" '
         f'xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">'
         f"{monogram}{builder(place_id, salt)}</svg>"
     )
@@ -132,6 +141,13 @@ def photos_from(content: dict[str, Any] | None, lead: dict[str, Any] | None = No
         "photos": [{"src": "hero.jpg", "alt": "New roof on Davis Drive",
                     "width": 2000, "height": 1333}]
     Files sit next to content.json in sites/<place_id>/. Never Places photos.
+
+    `alt` is required and `generate.accessibility_issues()` refuses to build
+    without it. A photo that genuinely carries nothing — a texture, a pattern
+    behind a heading — can say `"decorative": true` instead, which renders
+    `alt=""` so a screen reader skips it. Those are the only two options, and
+    both are deliberate; there is no path here that quietly ships an image with
+    no alt text at all (1.1.1).
     """
     photos = ((content or {}).get("photos") or [])
     out = []
@@ -140,9 +156,11 @@ def photos_from(content: dict[str, Any] | None, lead: dict[str, Any] | None = No
         if not src or src.startswith(("http://", "https://", "//")):
             # Anything remote is either a Places URL or a hotlink. Both are out.
             continue
+        decorative = bool(photo.get("decorative"))
         out.append({
             "src": src,
-            "alt": str(photo.get("alt") or "").strip(),
+            "alt": "" if decorative else str(photo.get("alt") or "").strip(),
+            "decorative": decorative,
             "width": str(photo.get("width") or ""),
             "height": str(photo.get("height") or ""),
         })

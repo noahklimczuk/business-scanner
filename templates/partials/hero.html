@@ -1,9 +1,17 @@
 {# The image slot. Owner photography when it has been collected, generated
    artwork until then — same box either way, so the layout never shifts on the
-   day the real pictures arrive. #}
-{% macro art(index=0, tall=False, caption='') %}
-<figure class="art-panel{{ ' art-panel-tall' if tall else '' }}" style="margin:0">
+   day the real pictures arrive.
+
+   A <div>, not a <figure>. A figure is announced as one, and a figure with no
+   caption wrapping a decorative drawing is a stop on the screen reader's tour
+   that leads nowhere. A photograph with real alt text says what it is through
+   the alt; the wrapper adds nothing either way. #}
+{% macro art(index=0, tall=False) %}
+<div class="art-panel{{ ' art-panel-tall' if tall else '' }}">
   {% if photos and photos|length > index %}
+  {# alt is always written, never omitted. Empty means "decoration, skip this",
+     which is a claim the operator has to make explicitly in content.json;
+     a missing alt fails the build rather than shipping (1.1.1). #}
   <img class="art-photo drift" src="{{ photos[index].src }}" alt="{{ photos[index].alt }}"
        {% if photos[index].width %}width="{{ photos[index].width }}"{% endif %}
        {% if photos[index].height %}height="{{ photos[index].height }}"{% endif %}
@@ -11,7 +19,7 @@
   {% else %}
   {{ make_art(index) }}
   {% endif %}
-</figure>
+</div>
 {% endmacro %}
 
 {% macro hero_actions(primary_label) %}

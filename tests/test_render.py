@@ -127,14 +127,20 @@ def test_a_business_name_with_markup_in_it_is_escaped():
     assert "&lt;script&gt;" in page
 
 
-def test_a_hostile_name_cannot_break_out_of_the_generated_artwork():
+def test_a_hostile_name_cannot_break_out_of_the_generated_artwork(monkeypatch):
     # The SVG is marked safe before it reaches Jinja, so it has to escape its
     # own interpolations. Google listings are not trusted input.
+    #
+    # Only the monogram interpolates the name now, and `initials()` happens to
+    # strip everything dangerous on its way through — which is a property of
+    # today's implementation, not a guarantee. So the escaping is tested with
+    # `initials()` forced to pass the name through: the day someone widens that
+    # regex to keep "&" or a digit, this fails instead of shipping an XSS.
     import visuals
+    monkeypatch.setattr(visuals, "initials", lambda name: name or "")
     art = visuals.artwork("p", "trade", '"><script>alert(1)</script>')
     assert "<script>" not in art
     assert "&lt;script&gt;" in art
-    assert art.count('aria-label="') == 1
 
 
 def test_copy_with_an_ampersand_survives_the_schema():
@@ -365,12 +371,11 @@ def test_every_image_slot_on_a_page_gets_its_own_composition(page):
     assert len(set(svgs)) == len(svgs)
 
 
-def test_only_the_first_artwork_carries_the_monogram_and_a_label(page):
+def test_only_the_first_artwork_carries_the_monogram(page):
     svgs = re.findall(r"<svg class=\"art-svg\".*?</svg>", page, re.S)
-    assert svgs[0].count("aria-label=") == 1
-    for decorative in svgs[1:]:
-        assert 'aria-hidden="true"' in decorative
-        assert "<text" not in decorative        # the initials would repeat
+    assert "<text" in svgs[0]
+    for repeat in svgs[1:]:
+        assert "<text" not in repeat           # the initials would repeat
 
 
 # --------------------------------------------------------------------------

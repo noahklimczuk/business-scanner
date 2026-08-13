@@ -9,6 +9,13 @@ is inside sRGB, lightness pushed down until the contrast ratio clears WCAG AA.
 The maths is OKLCH -> sRGB. It is worth the forty lines: HSL lightness is a lie
 across hues, and a palette built on it produces sites that look fine in review
 and fail on a phone in daylight.
+
+AA is not a nice-to-have here. Ontario's AODA makes WCAG 2.0 Level AA a legal
+obligation for these businesses' public websites, and 1.4.3 Contrast (Minimum)
+is the criterion a generated palette is most likely to break. So every pair the
+templates actually put together is enumerated in `audit()` and asserted across
+every hue in the tests — including the pairs that only exist inside a dark
+section, and the one behind a translucent bar.
 """
 from __future__ import annotations
 
@@ -25,6 +32,13 @@ INK = "#1D1D1F"
 INK_MUTED = "#6E6E73"
 HAIRLINE = "#D2D2D7"
 
+# Secondary text that sits on the frosted bars rather than on the page. Those
+# bars are translucent, so what is behind them is whatever happens to be
+# scrolling past — including a true-black section. `INK_MUTED` is 4.91 on the
+# page and 4.11 over that worst case, which is a fail. This grey is the same
+# role, dark enough to survive it.
+INK_MUTED_STRONG = "#55555A"
+
 # Dark sections need their own pairs. An accent darkened until white text sits
 # on it comfortably is far too dark to *be* text on black — this is the pair
 # that silently fails when a light-only palette grows a dark section.
@@ -32,9 +46,25 @@ NIGHT = "#000000"
 NIGHT_SUNK = "#141416"
 NIGHT_INK = "#F5F5F7"
 NIGHT_MUTED = "#A1A1A6"
+# Solid, not `color-mix(… transparent)`. Hairlines are the one place the old
+# CSS needed a Safari fallback for every single declaration; a flat hex needs
+# none, and a custom property cannot carry a fallback the way a property can.
+NIGHT_HAIRLINE = "#36363A"
+NIGHT_EDGE = "#4A4A4E"
 
-AA_TEXT = 4.5          # WCAG AA, body text
-AA_LARGE = 3.0         # WCAG AA, large text and UI boundaries
+AA_TEXT = 4.5          # WCAG AA 1.4.3, body text
+AA_LARGE = 3.0         # WCAG AA 1.4.3, large text (>=24px, or >=18.66px bold)
+# Aim a little above the line rather than at it. A colour that computes to
+# exactly 4.50 has no room for a browser that rounds a channel differently, and
+# the difference between 4.50 and 4.65 is invisible.
+AA_MARGIN = 0.15
+
+# How opaque the sticky nav and the mobile call bar are behind their blur.
+# Apple sits nearer 0.8, but Apple's pages are light the whole way down and
+# ours alternate to true black — at 0.8 the bar goes dark enough under a night
+# section to fail its own label. Defined here rather than in the stylesheet so
+# `audit()` measures the same number the CSS renders.
+CHROME_ALPHA = 0.92
 
 # Trades want a colour that reads as competence; salons want it softer. Same
 # machinery, different chroma ceiling.
@@ -107,6 +137,24 @@ def contrast(a: str, b: str) -> float:
     return (lighter + 0.05) / (darker + 0.05)
 
 
+def blend(colour: str, alpha: float, behind: str) -> str:
+    """What a translucent layer actually resolves to over a known backdrop.
+
+    Contrast is measured against rendered pixels, so a semi-transparent bar has
+    to be composited before it can be checked. sRGB compositing, because that
+    is what the browser does for `color-mix(in srgb, … transparent)`.
+    """
+    top = [int(colour.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    bottom = [int(behind.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    return "#" + "".join(f"{round(alpha * t + (1 - alpha) * b):02x}"
+                         for t, b in zip(top, bottom))
+
+
+def chrome_over(backdrop: str) -> str:
+    """The rendered colour of a frosted bar with `backdrop` scrolling under it."""
+    return blend(SURFACE, CHROME_ALPHA, backdrop)
+
+
 # ---------------------------------------------------------------------------
 # Palette
 # ---------------------------------------------------------------------------
@@ -144,7 +192,7 @@ def palette_for(place_id: str, template: str = "trade") -> dict[str, str]:
     chroma = CHROMA_BY_TEMPLATE.get(template, CHROMA_BY_TEMPLATE["trade"])
 
     # The fill colour, dark enough that white text on it is legible.
-    accent = _darken_until(AA_TEXT, "#FFFFFF", chroma, hue)
+    accent = _darken_until(AA_TEXT + AA_MARGIN, "#FFFFFF", chroma, hue)
     # A tint for section backgrounds. Low chroma so body copy stays comfortable.
     accent_wash = oklch_to_hex(0.965, min(0.028, chroma * 0.2), hue)
     accent_edge = oklch_to_hex(0.88, min(0.06, chroma * 0.45), hue)
@@ -153,12 +201,20 @@ def palette_for(place_id: str, template: str = "trade") -> dict[str, str]:
     # one "brand colour" is never enough. Darken against the darkest surface it
     # can land on, not just the page background, or it fails inside the washed
     # sections where it is used most.
-    darkest = min((SURFACE, accent_wash, SURFACE_SUNK), key=relative_luminance)
-    accent_ink = _darken_until(AA_TEXT, darkest, chroma, hue)
+    #
+    # The frosted bars are in that list for a reason that is easy to miss: they
+    # are translucent, so with a night section scrolling underneath they render
+    # around #e7e7e9 — darker than any opaque surface on the page. Solving it
+    # here rather than component by component means accent-coloured text is
+    # safe wherever it is put, instead of safe until someone moves it. It costs
+    # about one step of lightness on the worst hue, which is not visible.
+    darkest = min((SURFACE, accent_wash, SURFACE_SUNK, chrome_over(NIGHT)),
+                  key=relative_luminance)
+    accent_ink = _darken_until(AA_TEXT + AA_MARGIN, darkest, chroma, hue)
 
     # On black, the accent has to go the other way. Reusing `accent_ink` here
     # would put a near-black colour on a black background.
-    accent_bright = _lighten_until(AA_TEXT, NIGHT_SUNK, chroma, hue)
+    accent_bright = _lighten_until(AA_TEXT + AA_MARGIN, NIGHT_SUNK, chroma, hue)
     # Aurora layers: high lightness, low chroma, blended at low opacity.
     accent_glow = oklch_to_hex(0.82, min(0.13, chroma * 0.9), hue)
     accent_glow_alt = oklch_to_hex(0.78, min(0.12, chroma * 0.8), (hue + 42) % 360)
@@ -176,28 +232,66 @@ def palette_for(place_id: str, template: str = "trade") -> dict[str, str]:
         "surface_sunk": SURFACE_SUNK,
         "ink": INK,
         "ink_muted": INK_MUTED,
+        "ink_muted_strong": INK_MUTED_STRONG,
         "hairline": HAIRLINE,
         "night": NIGHT,
         "night_sunk": NIGHT_SUNK,
         "night_ink": NIGHT_INK,
         "night_muted": NIGHT_MUTED,
+        "night_hairline": NIGHT_HAIRLINE,
+        "night_edge": NIGHT_EDGE,
+        "chrome_alpha": f"{CHROME_ALPHA * 100:.0f}",
         "hue": f"{hue:.1f}",
     }
 
 
 def audit(palette: dict[str, str]) -> dict[str, float]:
-    """Contrast ratios for the pairs the templates actually put together."""
+    """Contrast ratios for every foreground/background pair the templates put
+    together, including the ones that only exist in a dark section.
+
+    This is the list the AA tests iterate. A pair that renders on a page but is
+    missing here is untested, so adding a colour to the stylesheet means adding
+    its pair here — that is the whole contract.
+    """
+    # A frosted bar is transparent, so the honest question is not "what colour
+    # is the bar" but "what does the bar look like with the darkest thing on
+    # the page behind it". That is a night section, and it is the case a
+    # light-page-only check never sees.
+    chrome = chrome_over(palette["night"])
+
     return {
+        # the light page
         "ink_on_surface": contrast(palette["ink"], palette["surface"]),
         "muted_on_surface": contrast(palette["ink_muted"], palette["surface"]),
-        "accent_fg_on_accent": contrast(palette["accent_fg"], palette["accent"]),
+        "muted_on_sunk": contrast(palette["ink_muted"], palette["surface_sunk"]),
+        "ink_on_sunk": contrast(palette["ink"], palette["surface_sunk"]),
         "accent_ink_on_surface": contrast(palette["accent_ink"], palette["surface"]),
+        "accent_ink_on_sunk": contrast(palette["accent_ink"], palette["surface_sunk"]),
         "ink_on_wash": contrast(palette["ink"], palette["accent_wash"]),
         "accent_ink_on_wash": contrast(palette["accent_ink"], palette["accent_wash"]),
-        "muted_on_sunk": contrast(palette["ink_muted"], palette["surface_sunk"]),
+        # buttons: the label against its own fill, both ways round
+        "accent_fg_on_accent": contrast(palette["accent_fg"], palette["accent"]),
+        "night_on_accent_bright": contrast(palette["night"], palette["accent_bright"]),
+        # dark sections
         "night_ink_on_night": contrast(palette["night_ink"], palette["night"]),
         "night_muted_on_night": contrast(palette["night_muted"], palette["night"]),
+        "night_muted_on_night_sunk": contrast(palette["night_muted"],
+                                              palette["night_sunk"]),
+        "night_ink_on_night_sunk": contrast(palette["night_ink"], palette["night_sunk"]),
         "accent_bright_on_night": contrast(palette["accent_bright"], palette["night"]),
         "accent_bright_on_night_sunk": contrast(palette["accent_bright"],
                                                 palette["night_sunk"]),
+        # the frosted nav and call bar, worst case: a night section behind them
+        "chrome_ink": contrast(palette["ink"], chrome),
+        "chrome_muted_strong": contrast(palette["ink_muted_strong"], chrome),
+        "chrome_accent_ink": contrast(palette["accent_ink"], chrome),
+        # focus rings — 2.4.7 needs the ring to be *visible*, which is the same
+        # measurement as text against the surface it lands on
+        "focus_on_surface": contrast(palette["ink"], palette["surface"]),
+        "focus_on_night": contrast(palette["night_ink"], palette["night"]),
     }
+
+
+def failures(palette: dict[str, str], target: float = AA_TEXT) -> dict[str, float]:
+    """The pairs below `target`. Empty means the palette is AA-clean."""
+    return {pair: ratio for pair, ratio in audit(palette).items() if ratio < target}

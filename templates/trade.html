@@ -16,22 +16,22 @@
 {% endblock %}
 
 {% block services %}
-<section class="section section-sunk" id="services">
+<section class="section section-sunk" id="services" aria-labelledby="services-h">
   <div class="shell-wide stage">
     <div class="stage-visual">
       {{ art(1, tall=True) }}
     </div>
     <div>
       <p class="eyebrow rise">What we do</p>
-      <h2 class="headline rise">The work, plainly</h2>
-      <div class="cards rise" style="margin-top:2.5rem;grid-template-columns:1fr">
+      <h2 class="headline rise" id="services-h">The work, plainly</h2>
+      <ul class="cards rise" role="list" style="margin-top:2.5rem;grid-template-columns:1fr">
         {% for service in c.services %}
-        <div class="card">
+        <li class="card">
           <h3 class="card-name">{{ service.name }}</h3>
           <p class="card-copy">{{ service.description }}</p>
-        </div>
+        </li>
         {% endfor %}
-      </div>
+      </ul>
     </div>
   </div>
 </section>

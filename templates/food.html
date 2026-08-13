@@ -16,23 +16,23 @@
 {% endblock %}
 
 {% block services %}
-<section class="section" id="services">
+<section class="section" id="services" aria-labelledby="services-h">
   <div class="shell centre">
     <p class="eyebrow rise">On the menu</p>
-    <h2 class="headline rise">What we serve</h2>
+    <h2 class="headline rise" id="services-h">What we serve</h2>
   </div>
   <div class="shell-wide" style="margin-top:3rem">
     {{ art(1) }}
   </div>
   <div class="shell">
-    <div class="menu rise" style="margin-top:3.5rem">
+    <ul class="menu rise" role="list" style="margin-top:3.5rem">
       {% for service in c.services %}
-      <div class="menu-row">
+      <li class="menu-row">
         <h3 class="menu-name">{{ service.name }}</h3>
         <p class="menu-copy">{{ service.description }}</p>
-      </div>
+      </li>
       {% endfor %}
-    </div>
+    </ul>
   </div>
 </section>
 {% endblock %}
