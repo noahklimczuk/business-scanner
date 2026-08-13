@@ -53,7 +53,10 @@ body {
   line-height: 1.47;
   letter-spacing: -.012em;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`: overflow-x:hidden turns this into a scroll
+     container and Safari then refuses to make any descendant sticky — which
+     would silently kill both the nav and the sticky stage on an iPad. */
+  overflow-x: clip;
 }
 img { max-width: 100%; height: auto; display: block; }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
@@ -123,7 +126,8 @@ a { color: var(--accent-ink); }
   display: inline-flex; align-items: center; gap: .45rem; white-space: nowrap;
   font-size: .82rem; font-weight: 500; color: var(--muted);
   border: 1px solid var(--hairline); border-radius: var(--r-pill);
-  padding: .32rem .8rem; background: color-mix(in srgb, var(--surface) 70%, transparent);
+  padding: .32rem .8rem; background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
 }
 .pill-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .pill.is-open { color: var(--accent-ink); border-color: var(--accent-edge); background: var(--accent-wash); }
@@ -135,10 +139,12 @@ a { color: var(--accent-ink); }
 /* ---------- nav ---------- */
 .nav {
   position: sticky; top: 0; z-index: 40;
+  background: var(--surface);                    /* Safari < 16.2 fallback */
   background: color-mix(in srgb, var(--surface) 72%, transparent);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid color-mix(in srgb, var(--hairline) 60%, transparent);
+  border-bottom: 1px solid var(--hairline);
+  border-bottom-color: color-mix(in srgb, var(--hairline) 60%, transparent);
 }
 .nav-in { display: flex; align-items: center; gap: 1rem; min-height: 52px; }
 .nav-name {
@@ -254,10 +260,12 @@ a { color: var(--accent-ink); }
 .callbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   display: flex; gap: .55rem; padding: .6rem .8rem calc(.6rem + env(safe-area-inset-bottom));
+  background: var(--surface);                    /* Safari < 16.2 fallback */
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-top: 1px solid color-mix(in srgb, var(--hairline) 70%, transparent);
+  border-top: 1px solid var(--hairline);
+  border-top-color: color-mix(in srgb, var(--hairline) 70%, transparent);
 }
 .callbar .btn { flex: 1 1 auto; }
 .callbar-call { flex: 2 1 auto; }

@@ -371,3 +371,105 @@ def test_only_the_first_artwork_carries_the_monogram_and_a_label(page):
     for decorative in svgs[1:]:
         assert 'aria-hidden="true"' in decorative
         assert "<text" not in decorative        # the initials would repeat
+
+
+# --------------------------------------------------------------------------
+# The fabrication check guards the render, not just the generation
+# --------------------------------------------------------------------------
+def test_hand_edited_copy_cannot_walk_past_the_fabrication_check():
+    # content.json is the documented edit surface. If the check only ran when
+    # Claude wrote the copy, typing a founding year into that file would ship it.
+    forged = {**GOOD, "about": ["Family owned since 1987.", "We do flat roofs."]}
+    with pytest.raises(generate.ContentError, match="1987"):
+        generate.render(LEAD, forged)
+
+
+def test_a_claim_the_owner_confirmed_renders():
+    claim = {**GOOD, "hero_sub": "Licensed roofing in Newmarket."}
+    with pytest.raises(generate.ContentError, match="licensed"):
+        generate.render(LEAD, claim)
+    # The note has to contain the claim it is vouching for.
+    ok = {**claim, "verified_facts": ["Owner confirmed they are licensed"]}
+    assert "Licensed roofing" in generate.render(LEAD, ok).html
+
+
+def test_the_refusal_says_which_file_to_edit():
+    forged = {**GOOD, "hero_sub": "The best roofers in town."}
+    with pytest.raises(generate.ContentError) as exc:
+        generate.render(LEAD, forged)
+    assert "content.json" in str(exc.value)
+    assert "verified_facts" in str(exc.value)
+
+
+# --------------------------------------------------------------------------
+# Shipped CSS carries no commentary
+# --------------------------------------------------------------------------
+def test_the_stylesheet_ships_without_its_comments(page):
+    css = re.search(r"<style>(.*?)</style>", page, re.S).group(1)
+    assert "/*" not in css
+    assert "\n  " not in css                    # indentation stripped too
+    assert ".art-panel" in css                  # rules survive
+
+
+def test_squeezing_css_does_not_touch_quoted_values():
+    squeezed = generate.squeeze_css('<style>\n  .chev::after { content: "\\203A"; }\n</style>')
+    assert '"\\203A"' in squeezed
+
+
+def test_squeezing_leaves_the_rest_of_the_document_alone():
+    html = '<p>/* not css */</p><style>/* gone */\n  a{color:red}\n</style><p>x</p>'
+    out = generate.squeeze_css(html)
+    assert "/* not css */" in out
+    assert "/* gone */" not in out
+    assert "a{color:red}" in out
+
+
+# --------------------------------------------------------------------------
+# Page weight, once real photographs arrive
+# --------------------------------------------------------------------------
+def test_weigh_counts_what_a_visitor_downloads_and_ignores_the_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(generate, "SITES_DIR", str(tmp_path))
+    generate.write_site("p", generate.render(LEAD, GOOD))
+    generate.save_content("p", {"version": 1, "copy": GOOD})
+    (tmp_path / "p" / "hero.jpg").write_bytes(b"x" * 400_000)
+
+    total, heaviest = generate.weigh("p")
+    assert heaviest[0][0] == "hero.jpg"
+    assert total > generate.PAGE_BUDGET_BYTES        # a phone photo blows it
+    assert not any(name.startswith("content") for name, _ in heaviest)
+
+
+def test_a_generated_site_is_far_inside_the_budget(tmp_path, monkeypatch):
+    monkeypatch.setattr(generate, "SITES_DIR", str(tmp_path))
+    generate.write_site("p", generate.render(LEAD, GOOD))
+    total, _ = generate.weigh("p")
+    assert total < generate.PAGE_BUDGET_BYTES / 4
+
+
+# --------------------------------------------------------------------------
+# iOS Safari: the iPad is the only device that matters for the pitch
+# --------------------------------------------------------------------------
+def test_the_page_does_not_break_sticky_positioning_in_safari(page):
+    # overflow-x:hidden on body makes it a scroll container, and Safari then
+    # refuses to make any descendant sticky — killing the nav and the stage.
+    css = css_of(page)
+    assert "overflow-x: clip" in css
+    assert "overflow-x: hidden" not in css
+    assert "position: sticky" in css
+
+
+def test_safe_area_insets_can_actually_resolve(page):
+    # env(safe-area-inset-*) is always 0 without viewport-fit=cover, so the
+    # call bar would sit under the home indicator.
+    assert "viewport-fit=cover" in page
+    assert "env(safe-area-inset-bottom)" in css_of(page)
+
+
+def test_translucent_surfaces_have_an_opaque_fallback(page):
+    # color-mix is Safari 16.2+. Without a fallback an older iPad renders the
+    # nav and call bar transparent over scrolling content.
+    css = css_of(page)
+    for block in (".nav {", ".callbar {"):
+        rules = block_after(css, block)
+        assert re.search(r"background:\s*var\(--surface\);", rules), block
+        assert "color-mix" in rules, block
