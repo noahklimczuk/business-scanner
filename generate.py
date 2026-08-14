@@ -17,6 +17,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, Optional
 from urllib.parse import quote
 
@@ -43,6 +44,113 @@ PAGE_BUDGET_BYTES = 150 * 1024
 # USD per million tokens for MODEL. Cache writes cost 1.25x input, reads 0.1x.
 PRICE_IN = 5.00
 PRICE_OUT = 25.00
+
+# Who writes the copy. Anthropic is the default and the only one these rules
+# were tuned against; the rest are here so the tool works before there is any
+# money to spend on it, and so switching back later is a settings change rather
+# than an edit to this file.
+#
+# Everything except Anthropic speaks the OpenAI /chat/completions shape, which
+# is why one adapter covers all of them — including services not named here.
+DEFAULT_PROVIDER = "anthropic"
+
+PROVIDERS: dict[str, Any] = {
+    "anthropic": {
+        "label": "Anthropic (Claude)",
+        "api": "anthropic",
+        "base_url": "",
+        "model": MODEL,
+        "price_in": PRICE_IN,
+        "price_out": PRICE_OUT,
+        "key_hint": "sk-ant-…",
+        "env": "ANTHROPIC_API_KEY",
+        "console": "console.anthropic.com",
+    },
+    "gemini": {
+        "label": "Google Gemini (free tier)",
+        "api": "openai",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-flash",
+        "price_in": 0.0,
+        "price_out": 0.0,
+        "key_hint": "AIza…",
+        "env": "GEMINI_API_KEY",
+        "console": "aistudio.google.com/apikey",
+    },
+    "groq": {
+        "label": "Groq (free tier)",
+        "api": "openai",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile",
+        "price_in": 0.0,
+        "price_out": 0.0,
+        "key_hint": "gsk_…",
+        "env": "GROQ_API_KEY",
+        "console": "console.groq.com/keys",
+    },
+    "custom": {
+        "label": "Anything OpenAI-compatible",
+        "api": "openai",
+        "base_url": "",
+        "model": "",
+        "price_in": 0.0,
+        "price_out": 0.0,
+        "key_hint": "",
+        "env": "LEADSMITH_COPY_KEY",
+        "console": "",
+    },
+}
+
+
+def resolve_provider(settings: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Turn the `copy` block of config.json into a ready-to-use provider.
+
+    Defaults to Anthropic, so a config written before any of this existed keeps
+    behaving exactly as it did. The operator's model and address override the
+    built-in ones, which is what makes `custom` work at all.
+    """
+    settings = settings or {}
+    name = (settings.get("provider") or DEFAULT_PROVIDER).strip().lower()
+    if name not in PROVIDERS:
+        known = ", ".join(sorted(PROVIDERS))
+        raise ContentError(
+            f'"{name}" is not a copywriting service this app knows about.\n'
+            f"Pick one of: {known}. Settings → Copywriter changes it."
+        )
+
+    spec = dict(PROVIDERS[name])
+    spec["provider"] = name
+    for field in ("model", "base_url"):
+        override = str(settings.get(field) or "").strip()
+        if override:
+            spec[field] = override
+
+    key = str(settings.get("api_key") or "").strip()
+    if key.startswith("PASTE_"):
+        key = ""
+    spec["api_key"] = key or os.environ.get(spec["env"], "").strip()
+    return spec
+
+
+def provider_from_config(cfg: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """The copywriter described by a whole config.json.
+
+    Lives here rather than in either front end so the CLI and the app cannot
+    disagree about which service is about to be billed.
+    """
+    cfg = cfg or {}
+    settings = dict(cfg.get("copy") or {})
+    if not settings.get("api_key"):
+        legacy = str(cfg.get("anthropic_api_key") or "").strip()
+        if legacy and not legacy.startswith("PASTE_"):
+            settings.setdefault("provider", "anthropic")
+            settings["api_key"] = legacy
+    return resolve_provider(settings)
+
+
+def provider_is_free(spec: dict[str, Any]) -> bool:
+    """No per-word charge. Not the same as no limit — free tiers have caps."""
+    return not (spec.get("price_in") or spec.get("price_out"))
 
 
 class ContentError(RuntimeError):
@@ -423,14 +531,18 @@ class Usage:
     cache_write_tokens: int = 0
     cache_read_tokens: int = 0
     attempts: int = 0
+    # Per-provider, because a free tier has to record a real zero rather than
+    # Anthropic's price against tokens nobody was charged for.
+    price_in: float = PRICE_IN
+    price_out: float = PRICE_OUT
 
     @property
     def cost(self) -> float:
         return (
-            self.input_tokens * PRICE_IN / 1e6
-            + self.cache_write_tokens * PRICE_IN * 1.25 / 1e6
-            + self.cache_read_tokens * PRICE_IN * 0.10 / 1e6
-            + self.output_tokens * PRICE_OUT / 1e6
+            self.input_tokens * self.price_in / 1e6
+            + self.cache_write_tokens * self.price_in * 1.25 / 1e6
+            + self.cache_read_tokens * self.price_in * 0.10 / 1e6
+            + self.output_tokens * self.price_out / 1e6
         )
 
     def add(self, usage: Any) -> None:
@@ -451,13 +563,182 @@ def _client(api_key: Optional[str] = None):
     return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
 
-def _call(client: Any, facts: str, correction: str = "") -> tuple[dict[str, Any], Any]:
-    message = facts if not correction else (
-        f"{facts}\n\nYour previous draft was rejected. Fix exactly these and "
-        f"return the whole object again:\n{correction}"
+def _message(facts: str, correction: str = "") -> str:
+    if not correction:
+        return facts
+    return (f"{facts}\n\nYour previous draft was rejected. Fix exactly these and "
+            f"return the whole object again:\n{correction}")
+
+
+def _endpoint(spec: dict[str, Any]) -> tuple[str, dict[str, str]]:
+    base = str(spec.get("base_url") or "").strip().rstrip("/")
+    if not base:
+        raise ContentError(
+            f"No address for {spec['label']}. Settings → Copywriter → Address "
+            "needs the base URL of an OpenAI-compatible API, ending in /v1."
+        )
+    headers = {"Content-Type": "application/json"}
+    if spec.get("api_key"):
+        headers["Authorization"] = f"Bearer {spec['api_key']}"
+    return base, headers
+
+
+def _raise_for_status(spec: dict[str, Any], response: Any) -> None:
+    """Turn an HTTP failure into a sentence the operator can act on."""
+    if response.status_code in (401, 403):
+        raise ContentError(
+            f"{spec['label']} rejected the key. Check Settings → Copywriter — "
+            f"a key for one service will not work on another."
+        )
+    if response.status_code == 404:
+        # Nearly always a model name, because the address is fixed for the
+        # named services and model names change every few months.
+        raise ContentError(
+            f"{spec['label']} has no model called \"{spec.get('model')}\".\n"
+            "Model names change. Settings → Copywriter → Check lists the ones "
+            "your key can actually use right now."
+        )
+    if response.status_code == 429:
+        # The expected failure on a free tier, so it gets its own sentence
+        # rather than being lumped in with a generic HTTP error.
+        raise ContentError(
+            f"{spec['label']} says you have hit its rate limit.\n"
+            "Free tiers cap requests per minute and per day. Wait and build "
+            "again — nothing was lost, and the lead is still on the list."
+        )
+    if response.status_code >= 400:
+        raise ContentError(
+            f"{spec['label']} returned HTTP {response.status_code}:\n"
+            f"  {response.text[:300].strip()}"
+        )
+
+
+def list_models(spec: dict[str, Any]) -> list[str]:
+    """Ask the service which models this key can actually use.
+
+    Model names change every few months, vary by provider tier, and differ
+    between two keys for the same service — so the honest answer to "which one
+    do I put here" comes from the service, not from a table baked into this
+    file that is wrong by the time someone reads it.
+    """
+    import requests
+
+    if spec.get("api") != "openai":
+        return [spec["model"]] if spec.get("model") else []
+    base, headers = _endpoint(spec)
+    try:
+        response = requests.get(f"{base}/models", headers=headers, timeout=30)
+    except requests.RequestException as exc:
+        raise ContentError(
+            f"Could not reach {spec['label']} at {base} ({exc.__class__.__name__}).\n"
+            "Check the address in Settings, and that this machine is online."
+        ) from exc
+
+    _raise_for_status(spec, response)
+    try:
+        data = (response.json() or {}).get("data") or []
+    except ValueError as exc:
+        raise ContentError(
+            f"{spec['label']} did not answer with a model list. It may not be "
+            "OpenAI-compatible enough for this."
+        ) from exc
+    # Some services namespace the id ("models/gemini-3.6-flash"); the call
+    # accepts either, but the bare name is what a person recognises.
+    return sorted({str(m.get("id", "")).split("/")[-1]
+                   for m in data if m.get("id")})
+
+
+def _call_openai(spec: dict[str, Any], facts: str,
+                 correction: str = "") -> tuple[dict[str, Any], Any]:
+    """One turn against anything that speaks OpenAI's /chat/completions.
+
+    Written against `requests` rather than a vendor SDK on purpose: the shape is
+    small and stable, every free service implements it, and the desktop build is
+    already 56MB without adding a third client library to it.
+    """
+    import requests
+
+    base, headers = _endpoint(spec)
+    if not str(spec.get("model") or "").strip():
+        raise ContentError(
+            f"No model name for {spec['label']}. Settings → Copywriter → Model "
+            "needs the exact name the service uses."
+        )
+
+    payload = {
+        "model": spec["model"],
+        "max_tokens": MAX_TOKENS,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _message(facts, correction)},
+        ],
+        # The same schema the Anthropic path enforces. Services that honour it
+        # cannot return the wrong shape; the ones that only approximate it are
+        # caught by review() a moment later, which is the real safety net.
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "site_copy", "schema": CONTENT_SCHEMA,
+                            "strict": True},
+        },
+    }
+
+    try:
+        response = requests.post(f"{base}/chat/completions", json=payload,
+                                 headers=headers, timeout=120)
+    except requests.RequestException as exc:
+        raise ContentError(
+            f"Could not reach {spec['label']} at {base} ({exc.__class__.__name__}).\n"
+            "Check the address in Settings, and that this machine is online."
+        ) from exc
+
+    _raise_for_status(spec, response)
+
+    try:
+        body = response.json()
+        choice = body["choices"][0]
+    except (ValueError, KeyError, IndexError) as exc:
+        raise ContentError(
+            f"{spec['label']} returned a reply this app could not read "
+            f"({exc.__class__.__name__}). Re-run the build; if it keeps "
+            "happening the service is not OpenAI-compatible enough for this."
+        ) from exc
+
+    if choice.get("finish_reason") == "length":
+        raise ContentError(
+            "The copy was cut off before it finished. Re-run the build; if it "
+            f"happens again, raise MAX_TOKENS (currently {MAX_TOKENS:,})."
+        )
+    message = choice.get("message") or {}
+    if message.get("refusal"):
+        raise ContentError(
+            f"{spec['label']} declined to write copy for this business:\n"
+            f"  {message['refusal']}\nSkip this lead."
+        )
+
+    text = message.get("content") or ""
+    raw = body.get("usage") or {}
+    usage = SimpleNamespace(
+        input_tokens=raw.get("prompt_tokens", 0) or 0,
+        output_tokens=raw.get("completion_tokens", 0) or 0,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
     )
+    try:
+        return json.loads(text), usage
+    except json.JSONDecodeError as exc:
+        raise ContentError(
+            f"{spec['label']} returned something that is not JSON ({exc.msg}). "
+            "Re-run the build — this is usually transient. If it never "
+            "succeeds, the model is too small to hold the format; try a larger "
+            "one in Settings → Copywriter."
+        ) from exc
+
+
+def _call(client: Any, facts: str, correction: str = "",
+          model: Optional[str] = None) -> tuple[dict[str, Any], Any]:
+    message = _message(facts, correction)
     response = client.messages.create(
-        model=MODEL,
+        model=model or MODEL,
         max_tokens=MAX_TOKENS,
         # The rules are identical for every business and easily clear the
         # 512-token cache minimum, so the second site of the evening is cheaper.
@@ -497,16 +778,30 @@ def _call(client: Any, facts: str, correction: str = "") -> tuple[dict[str, Any]
 def write_copy(lead: dict[str, Any], city: str = "",
                client: Any = None, api_key: Optional[str] = None,
                max_attempts: int = 2,
-               verified: Optional[list[str]] = None) -> tuple[dict[str, Any], Usage]:
-    """One business in, validated copy out. Retries once on a rejected draft."""
-    client = client or _client(api_key)
+               verified: Optional[list[str]] = None,
+               provider: Optional[dict[str, Any]] = None) -> tuple[dict[str, Any], Usage]:
+    """One business in, validated copy out. Retries once on a rejected draft.
+
+    `provider` is the `copy` block of config.json (see resolve_provider). An
+    explicit `client` still wins, because the tests hand one in and because the
+    Anthropic path has never needed anything else.
+    """
+    spec = resolve_provider(provider)
+    if api_key:
+        spec["api_key"] = api_key
+    if client is None and spec["api"] == "anthropic":
+        client = _client(spec.get("api_key") or None)
+
     facts = facts_for(lead, city)
     source = source_text(lead, city, verified)
-    usage = Usage()
+    usage = Usage(price_in=spec["price_in"], price_out=spec["price_out"])
     correction = ""
 
     for attempt in range(1, max_attempts + 1):
-        content, raw_usage = _call(client, facts, correction)
+        if client is not None:
+            content, raw_usage = _call(client, facts, correction, spec["model"])
+        else:
+            content, raw_usage = _call_openai(spec, facts, correction)
         usage.add(raw_usage)
         issues = review(content, source)
         if not issues:

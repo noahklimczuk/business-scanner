@@ -1,6 +1,13 @@
 {
   "google_api_key": "PASTE_YOUR_PLACES_API_KEY_HERE",
-  "anthropic_api_key": "PASTE_YOUR_ANTHROPIC_API_KEY_HERE",
+
+  "//copy": "Who writes the words on each site. provider is anthropic, gemini, groq, or custom. Gemini and Groq have free tiers and need no card; Anthropic costs about 3 cents a business and writes the best copy. model and base_url are optional overrides — custom needs base_url, the address of any OpenAI-compatible API ending in /v1.",
+  "copy": {
+    "provider": "gemini",
+    "api_key": "PASTE_YOUR_COPYWRITER_API_KEY_HERE",
+    "model": "",
+    "base_url": ""
+  },
 
   "//stripe": "Read-only is enough: nothing here writes to Stripe, it reconciles what Stripe says against what we think.",
   "stripe_secret_key": "",

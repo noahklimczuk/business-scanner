@@ -34,12 +34,19 @@ from gui.work import Job
 COPY_ESTIMATE_USD = 0.03
 
 
+def copywriter(window) -> dict[str, Any]:
+    """Which service writes the copy, resolved from settings.
+
+    Reads the `copy` block, falling back to the old top-level
+    `anthropic_api_key` so a config written before there was a choice keeps
+    working untouched.
+    """
+    return generate.provider_from_config(window.cfg)
+
+
 def _keys(window) -> dict[str, Optional[str]]:
-    cfg = window.cfg
-    anthropic = (cfg.get("anthropic_api_key") or "").strip()
-    if anthropic.startswith("PASTE_"):
-        anthropic = ""
-    return {"google": config.api_key(cfg), "anthropic": anthropic or None}
+    return {"google": config.api_key(window.cfg),
+            "copy": copywriter(window).get("api_key") or None}
 
 
 def open_path(path: str) -> None:
@@ -157,17 +164,20 @@ def build_site(window, lead: dict[str, Any], *, launch: bool = False) -> None:
         return
 
     needs_copy = not (saved and saved.get("copy"))
+    spec = copywriter(window)
     if needs_copy:
-        anthropic = _keys(window)["anthropic"]
-        if not anthropic:
+        if not spec.get("api_key"):
             window.error(
-                "No Anthropic key, so the copy cannot be written.",
-                "Add it in Settings. Everything else in the app works without "
-                "it — this is the one step that needs it.")
+                f"No key for {spec['label']}, so the copy cannot be written.",
+                "Add it in Settings → Copywriter. Everything else in the app "
+                "works without it — this is the one step that needs it.")
             return
-        if not window.confirm(
+        # A free tier has nothing to warn about, and a dialog that says "about
+        # to spend money" over a $0.00 charge teaches the operator to click
+        # through the one that matters. The paid path keeps its confirmation.
+        if not generate.provider_is_free(spec) and not window.confirm(
                 "About to spend money",
-                f"Claude will write the copy for {lead['name']}.\n\n"
+                f"{spec['label']} will write the copy for {lead['name']}.\n\n"
                 f"Estimated cost: ${COPY_ESTIMATE_USD:,.2f} USD\n"
                 f"Copy written in the last 30 days: "
                 f"${db.generation_spend(con, 30):,.2f}\n\n"
@@ -185,8 +195,7 @@ def build_site(window, lead: dict[str, Any], *, launch: bool = False) -> None:
         if content is None:
             job.report(0, 0, f"Writing copy for {lead['name']}…")
             content, usage = generate.write_copy(
-                lead, city=city, api_key=_keys(window)["anthropic"],
-                verified=verified)
+                lead, city=city, provider=spec, verified=verified)
             generate.save_content(place_id, {
                 "version": generate.CONTENT_VERSION,
                 "place_id": place_id,

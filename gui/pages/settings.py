@@ -10,12 +10,14 @@ through a temporary file, at 0600.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QGridLayout, QLabel
+from PySide6.QtWidgets import QComboBox, QGridLayout, QLabel
 
 import config
+import generate
 import prospect
 from gui.pages import Page
 from gui.widgets import Banner, Card, Field, button, muted, row
+from gui.work import Job
 
 PLACES_HELP = (
     "Finds the businesses. Costs about "
@@ -23,10 +25,37 @@ PLACES_HELP = (
     "$15. Get one at console.cloud.google.com: enable <b>Places API (New)</b>, "
     "not the older one, and set a daily quota cap so a mistake cannot run away."
 )
-ANTHROPIC_HELP = (
-    "Writes the words on each site. Roughly 2–4 cents per business, once — "
-    "the copy is cached, so rebuilding is free. Everything else in this app "
-    "works without it. Get one at console.anthropic.com."
+COPY_HELP = (
+    "Writes the words on each site — the one step that needs a second key. "
+    "Everything else in this app works without it, and the copy is cached, so "
+    "rebuilding a site is always free."
+)
+# Said once, next to the choice, because it is the thing that decides whether a
+# free tier is worth it: the house rules were written against Claude, and a
+# smaller model trips them more often.
+PROVIDER_NOTES = {
+    "anthropic": (
+        "Around 3 cents per business, once. The best copy, and what this app's "
+        "rules were tuned against. Key from <b>console.anthropic.com</b>."
+    ),
+    "gemini": (
+        "Free, no card. Google sets the daily limits and changes them without "
+        "notice. Key from <b>aistudio.google.com/apikey</b>."
+    ),
+    "groq": (
+        "Free, no card. The fastest, and the plainest writing of the three. "
+        "Key from <b>console.groq.com/keys</b>."
+    ),
+    "custom": (
+        "Any service that speaks the OpenAI <code>/chat/completions</code> "
+        "shape — OpenRouter, Cerebras, a local Ollama. Give it the base "
+        "address (ending in <code>/v1</code>) and the exact model name."
+    ),
+}
+FREE_TIER_CAVEAT = (
+    "A free model writes acceptable copy, but trips this app's rules more "
+    "often than Claude does. When a draft is rejected twice you get no site "
+    "and a saved draft to edit by hand — not a wrong site."
 )
 STRIPE_HELP = (
     "Optional, and read-only. Lets the Money page tell you when a client's "
@@ -48,13 +77,38 @@ class SettingsPage(Page):
 
         keys = Card("API keys", "Each one unlocks a different part of the app.")
         self.google = Field("Google Places", "AIza…", PLACES_HELP, password=True)
-        self.anthropic = Field("Anthropic", "sk-ant-…", ANTHROPIC_HELP, password=True)
         self.stripe = Field("Stripe (optional)", "sk_live_… or rk_live_…",
                             STRIPE_HELP, password=True)
-        for field in (self.google, self.anthropic, self.stripe):
+        for field in (self.google, self.stripe):
             field.hint.setTextFormat(Qt.RichText)   # the help text has links
             keys.add(field)
         self.body.addWidget(keys)
+
+        writer = Card("Copywriter", COPY_HELP)
+        self.provider = QComboBox()
+        for name in ("anthropic", "gemini", "groq", "custom"):
+            self.provider.addItem(generate.PROVIDERS[name]["label"], name)
+        self.provider.currentIndexChanged.connect(self._provider_changed)
+        writer.add(self.provider)
+
+        self.provider_note = muted("")
+        self.provider_note.setTextFormat(Qt.RichText)
+        self.provider_note.setWordWrap(True)
+        writer.add(self.provider_note)
+
+        self.copy_key = Field("Key", "", "", password=True)
+        self.copy_model = Field(
+            "Model", "",
+            "Leave blank for this service's default. Model names change — "
+            "Check asks the service which ones your key can use today.")
+        self.copy_url = Field(
+            "Address", "https://…/v1",
+            "The base URL of an OpenAI-compatible API, ending in /v1.")
+        for field in (self.copy_key, self.copy_model, self.copy_url):
+            writer.add(field)
+        self.check_button = button("Check", "quiet", self.check_models)
+        writer.box.addLayout(row(self.check_button, stretch_at=1))
+        self.body.addWidget(writer)
 
         details = Card("Your details",
                        "These appear on the leave-behind you hand to clients.")
@@ -98,15 +152,76 @@ class SettingsPage(Page):
             stretch_at=2))
         self.body.addStretch(1)
 
+    def _provider_changed(self) -> None:
+        """Retune the fields around the chosen service."""
+        name = self.provider.currentData() or generate.DEFAULT_PROVIDER
+        spec = generate.PROVIDERS[name]
+        note = PROVIDER_NOTES.get(name, "")
+        if generate.provider_is_free(spec):
+            note = f"{note}<br><br>{FREE_TIER_CAVEAT}"
+        self.provider_note.setText(note)
+        self.copy_key.input.setPlaceholderText(spec["key_hint"])
+        self.copy_model.input.setPlaceholderText(spec["model"] or "model name")
+        # Only the catch-all needs an address; the named services have one.
+        self.copy_url.setVisible(name == "custom")
+
+    def check_models(self) -> None:
+        """Ask the service what this key can use, and say so.
+
+        On a worker thread like everything else that touches the network — a
+        settings page that freezes while you are still deciding whether to
+        trust the tool is a bad first impression.
+        """
+        provider = self.provider.currentData() or generate.DEFAULT_PROVIDER
+        spec = generate.resolve_provider({
+            "provider": provider,
+            "api_key": self.copy_key.text(),
+            "model": self.copy_model.text(),
+            # Same rule as save(): a stale address left in a hidden box must not
+            # quietly redirect a named service somewhere else.
+            "base_url": self.copy_url.text() if provider == "custom" else "",
+        })
+        if not spec.get("api_key"):
+            self.copy_key.set_error("Paste the key first, then Check.")
+            return
+
+        def done(names: list[str]) -> None:
+            if not names:
+                self.provider_note.setText(
+                    f"{spec['label']} accepted the key but listed no models.")
+                return
+            shown = "".join(f"<br>&nbsp;&nbsp;{name}" for name in names[:15])
+            more = (f"<br>&nbsp;&nbsp;… and {len(names) - 15} more"
+                    if len(names) > 15 else "")
+            self.provider_note.setText(
+                f"<b>{spec['label']} accepts this key.</b> Models you can use "
+                f"today — put one in the Model box:{shown}{more}")
+
+        self.window_ref.run_job(Job(generate.list_models, spec),
+                                status="Asking the service…", on_done=done)
+
     def refresh(self) -> None:
         cfg = config.load()
         self.window_ref.cfg = cfg
         business = cfg.get("business", {})
         pricing = cfg.get("pricing", {})
 
+        copy = dict(cfg.get("copy") or {})
+        legacy = (cfg.get("anthropic_api_key") or "").strip()
+        if not copy.get("api_key") and legacy and not legacy.startswith("PASTE_"):
+            # Written before there was a choice of service.
+            copy.setdefault("provider", "anthropic")
+            copy["api_key"] = legacy
+        chosen = (copy.get("provider") or generate.DEFAULT_PROVIDER).lower()
+        index = self.provider.findData(chosen)
+        self.provider.setCurrentIndex(index if index >= 0 else 0)
+        self._provider_changed()
+
         for field, value in (
                 (self.google, cfg.get("google_api_key")),
-                (self.anthropic, cfg.get("anthropic_api_key")),
+                (self.copy_key, copy.get("api_key")),
+                (self.copy_model, copy.get("model")),
+                (self.copy_url, copy.get("base_url")),
                 (self.stripe, cfg.get("stripe_secret_key")),
                 (self.operator, business.get("operator_name")),
                 (self.legal, business.get("legal_name")),
@@ -140,10 +255,23 @@ class SettingsPage(Page):
                 field.set_error("Numbers only — no dollar sign.")
                 return
 
+        provider = self.provider.currentData() or generate.DEFAULT_PROVIDER
+        if provider == "custom" and self.copy_key.text() and not self.copy_url.text():
+            self.copy_url.set_error("An OpenAI-compatible address is required.")
+            return
+
         cfg = dict(config.load())
         cfg["google_api_key"] = self.google.text()
-        cfg["anthropic_api_key"] = self.anthropic.text()
         cfg["stripe_secret_key"] = self.stripe.text()
+        cfg["copy"] = {
+            "provider": provider,
+            "api_key": self.copy_key.text(),
+            "model": self.copy_model.text(),
+            "base_url": self.copy_url.text() if provider == "custom" else "",
+        }
+        # Migrated into the block above; leaving it would make the file look
+        # like it still holds a key that nothing reads.
+        cfg.pop("anthropic_api_key", None)
         cfg["business"] = {
             **cfg.get("business", {}),
             "operator_name": self.operator.text(),

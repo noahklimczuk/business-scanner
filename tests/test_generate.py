@@ -300,3 +300,143 @@ def test_a_site_stays_inside_the_cost_target():
     usage = generate.Usage(input_tokens=150, output_tokens=800,
                            cache_write_tokens=800)
     assert usage.cost < 0.15
+
+
+# ---------------------------------------------------------------------------
+# Choosing who writes the copy
+#
+# The point of all this is that the app is useful before there is any money to
+# spend on it, and that moving to Anthropic later is a settings change rather
+# than an edit to this file. Both directions are tested.
+# ---------------------------------------------------------------------------
+def test_no_choice_recorded_still_means_anthropic():
+    """A config written before there was a choice must not change behaviour."""
+    spec = generate.resolve_provider(None)
+    assert spec["provider"] == "anthropic"
+    assert spec["model"] == generate.MODEL
+    assert not generate.provider_is_free(spec)
+
+
+def test_a_free_provider_records_a_real_zero():
+    # Not Anthropic's price against tokens nobody was charged for — the Money
+    # page adds these up and has to stay honest.
+    spec = generate.resolve_provider({"provider": "groq"})
+    assert generate.provider_is_free(spec)
+    usage = generate.Usage(input_tokens=5_000, output_tokens=5_000,
+                           price_in=spec["price_in"], price_out=spec["price_out"])
+    assert usage.cost == 0
+
+
+def test_the_operator_can_override_the_model_and_address():
+    spec = generate.resolve_provider({
+        "provider": "custom", "model": "llama3", "base_url": "http://localhost:11434/v1"})
+    assert spec["model"] == "llama3"
+    assert spec["base_url"] == "http://localhost:11434/v1"
+
+
+def test_a_placeholder_key_is_not_mistaken_for_a_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    spec = generate.resolve_provider({"api_key": "PASTE_YOUR_KEY_HERE"})
+    assert spec["api_key"] == ""
+
+
+def test_a_service_this_app_does_not_know_says_so():
+    with pytest.raises(generate.ContentError, match="not a copywriting service"):
+        generate.resolve_provider({"provider": "openai"})
+
+
+class FakePost:
+    """Stands in for requests.post so no test ever reaches the network."""
+
+    def __init__(self, status_code=200, payload=None, text=""):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = text
+        self.sent = {}
+
+    def __call__(self, url, json=None, headers=None, timeout=None):
+        self.sent = {"url": url, "json": json, "headers": headers}
+        return self
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("not json")
+        return self._payload
+
+
+def openai_reply(content, finish_reason="stop"):
+    return {"choices": [{"finish_reason": finish_reason,
+                         "message": {"content": json.dumps(content)}}],
+            "usage": {"prompt_tokens": 900, "completion_tokens": 700}}
+
+
+def test_an_openai_compatible_service_gets_the_same_schema(monkeypatch):
+    post = FakePost(payload=openai_reply(GOOD))
+    monkeypatch.setattr("requests.post", post)
+
+    content, usage = generate.write_copy(
+        LEAD, "Newmarket, ON", provider={"provider": "groq", "api_key": "gsk_x"})
+
+    assert content == GOOD
+    assert usage.cost == 0                     # free tier, and it stays zero
+    assert post.sent["url"].endswith("/chat/completions")
+    assert post.sent["headers"]["Authorization"] == "Bearer gsk_x"
+    # The schema is the same one the Anthropic path enforces — a service that
+    # honours it cannot hand back the wrong shape.
+    fmt = post.sent["json"]["response_format"]
+    assert fmt["json_schema"]["schema"] == generate.CONTENT_SCHEMA
+    assert fmt["json_schema"]["strict"] is True
+
+
+def test_a_free_tier_rate_limit_says_what_to_do(monkeypatch):
+    monkeypatch.setattr("requests.post", FakePost(status_code=429, text="slow down"))
+    with pytest.raises(generate.ContentError, match="rate limit"):
+        generate.write_copy(LEAD, provider={"provider": "gemini", "api_key": "k"})
+
+
+def test_a_key_for_the_wrong_service_is_named_as_such(monkeypatch):
+    monkeypatch.setattr("requests.post", FakePost(status_code=401, text="nope"))
+    with pytest.raises(generate.ContentError, match="rejected the key"):
+        generate.write_copy(LEAD, provider={"provider": "groq", "api_key": "sk-ant-oops"})
+
+
+def test_a_custom_service_without_an_address_is_caught_before_the_network():
+    with pytest.raises(generate.ContentError, match="No address"):
+        generate.write_copy(LEAD, provider={"provider": "custom", "api_key": "k"})
+
+
+def test_copy_that_breaks_the_rules_is_still_refused_from_a_free_service(monkeypatch):
+    # The whole safety net has to hold whoever wrote the words.
+    bad = copy_with(hero_sub="Rated 4.8 stars by 84 customers.")
+    monkeypatch.setattr("requests.post", FakePost(payload=openai_reply(bad)))
+    with pytest.raises(generate.ContentError, match="rating or review count"):
+        generate.write_copy(LEAD, "Newmarket, ON",
+                            provider={"provider": "groq", "api_key": "k"})
+
+
+def test_the_service_is_asked_which_models_it_has(monkeypatch):
+    """Model names change; a table in this file would be wrong by the time
+    anyone read it, so the answer comes from the service."""
+    class FakeGet(FakePost):
+        def __call__(self, url, headers=None, timeout=None):
+            self.sent = {"url": url, "headers": headers}
+            return self
+
+    get = FakeGet(payload={"data": [
+        {"id": "models/gemini-3.6-flash"}, {"id": "models/gemini-3.5-flash"}]})
+    monkeypatch.setattr("requests.get", get)
+
+    names = generate.list_models(generate.resolve_provider(
+        {"provider": "gemini", "api_key": "k"}))
+
+    assert get.sent["url"].endswith("/models")
+    # Namespaced ids are accepted either way; the bare name is what a person
+    # recognises and what the Model box wants.
+    assert names == ["gemini-3.5-flash", "gemini-3.6-flash"]
+
+
+def test_a_model_name_that_no_longer_exists_says_how_to_find_one(monkeypatch):
+    monkeypatch.setattr("requests.post", FakePost(status_code=404, text="not found"))
+    with pytest.raises(generate.ContentError, match="Check lists the ones"):
+        generate.write_copy(LEAD, provider={
+            "provider": "gemini", "api_key": "k", "model": "gemini-1.0-ancient"})
