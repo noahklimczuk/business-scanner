@@ -27,6 +27,7 @@ import db                                                       # noqa: E402
 import design                                                   # noqa: E402
 from gui import theme                                           # noqa: E402
 from gui.work import Job, Runner, _human                        # noqa: E402
+from types import SimpleNamespace                               # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -387,3 +388,67 @@ def test_a_custom_service_cannot_be_saved_without_an_address(window, app):
     settings.copy_url.set_text("")
     settings.save()
     assert settings.copy_url.error.isVisibleTo(settings.copy_url)
+
+
+# ---------------------------------------------------------------------------
+# The buttons actually run
+#
+# Every action is written `def work(job)` and started as `Job(work)` — the job
+# cannot be passed at construction because it does not exist yet. That
+# injection was documented but never implemented, so Scan, Build site, Publish
+# and Check Stripe all raised TypeError the instant their thread started. The
+# page tests missed it because building a page never presses its buttons.
+# ---------------------------------------------------------------------------
+def test_a_job_hands_itself_to_work_that_asked_for_it(app):
+    seen = {}
+
+    def work(job):
+        seen["job"] = job
+        return "done"
+
+    job = Job(work)
+    job.signals.failed.connect(lambda m, d: seen.update(failed=m))
+    job.run()
+    assert seen.get("failed") is None, seen.get("failed")
+    assert seen["job"] is job
+
+
+def test_a_job_hands_over_the_progress_callback_when_asked(app):
+    seen = {}
+    job = Job(lambda report: seen.update(report=report))
+    job.run()
+    assert seen["report"] == job.report
+
+
+def test_a_plain_function_is_left_alone(app):
+    """`Job(fn, arg)` must keep working — nothing is injected uninvited."""
+    job = Job(lambda value: value * 2, 21)
+    got = {}
+    job.signals.finished.connect(lambda r: got.update(result=r))
+    job.run()
+    assert got["result"] == 42
+
+
+def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
+    """The end-to-end shape of the bug: press the button, run the job."""
+    import prospect
+    from gui import actions
+
+    monkeypatch.setattr(config := __import__("config"), "api_key", lambda cfg: "AIzaTest")
+    monkeypatch.setattr(prospect, "geocode",
+                        lambda *a, **k: (44.05, -79.46, "Newmarket, ON"))
+    monkeypatch.setattr(prospect, "run", lambda *a, **k: SimpleNamespace(
+        seen=12, new_leads=5, calls_made=8, calls_failed=0, actual_cost=0.32))
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    captured = {}
+    monkeypatch.setattr(window, "run_job",
+                        lambda job, **kw: captured.update(job=job) or True)
+
+    actions.scan(window, "Newmarket", 2.0, 1500, dry_run=False)
+
+    job = captured["job"]
+    failed = {}
+    job.signals.failed.connect(lambda m, d: failed.update(message=m, detail=d))
+    job.run()
+    assert not failed, failed.get("message")
