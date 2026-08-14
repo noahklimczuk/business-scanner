@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leadsmith"
-version = "0.2.5"
+# Read from version.py, so the number lives in exactly one place and the
+# update check cannot disagree with what was released.
+dynamic = ["version"]
 description = "Find businesses with no website, build them one, sell it in person."
 requires-python = ">=3.11"
 dependencies = [
@@ -39,8 +41,12 @@ leadsmith-app = "leadsmith_app:main"
 include-package-data = true
 py-modules = ["billing", "board", "cli", "config", "db", "deploy", "design",
               "enrich", "generate", "hours", "leadsmith_app", "offboard",
-              "pitch", "prospect", "qr", "search", "visuals"]
+              "pitch", "prospect", "qr", "search", "update", "version",
+              "visuals"]
 packages = ["gui", "gui.pages"]
+
+[tool.setuptools.dynamic]
+version = {attr = "version.VERSION"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -27,6 +27,7 @@ import generate
 import offboard
 import pitch
 import prospect
+import update
 from gui.work import Job
 
 # What one page of copy costs, near enough, for the confirmation dialog. The
@@ -410,3 +411,87 @@ def sync_billing(window, on_done=None) -> None:
         return result
 
     window.run_job(Job(work), status="Checking Stripe…", on_done=on_done)
+
+
+# ---------------------------------------------------------------------------
+# Updating
+# ---------------------------------------------------------------------------
+def check_for_update(window, *, announce: bool = False, on_done=None) -> None:
+    """Ask GitHub whether there is a newer build.
+
+    Deliberately not through `run_job`. That queue exists to stop two jobs that
+    spend money or write the same files from overlapping, and it refuses a
+    second job while one is running — so putting a silent background check on
+    it would mean an update check landing at launch could block the operator's
+    first scan, and a scan could swallow the check. This costs nothing, writes
+    nothing, and is allowed to happen alongside real work.
+    """
+    def work():
+        return update.check()
+
+    def done(release):
+        window.show_update(release)
+        if announce and release is None:
+            window.toast(f"You are on the latest version ({update.VERSION}).")
+        if on_done:
+            on_done(release)
+
+    def failed(message, detail):
+        # Only the operator who pressed a button hears about this. The check at
+        # launch stays silent, because "could not reach GitHub" is not news to
+        # somebody who already knows they are on a phone hotspot.
+        if announce:
+            window.error("Could not check for updates.", detail or message)
+        if on_done:
+            on_done(None)
+
+    window.run_quietly(Job(work), on_done=done, on_fail=failed)
+
+
+def install_update(window, release) -> None:
+    """Download the new build, check it, and put it in place.
+
+    This one *does* go through `run_job`: it is slow, it has a progress bar, it
+    replaces the executable underneath the app, and none of that may happen
+    twice at once or while a scan is mid-write.
+    """
+    if not release.installable:
+        webbrowser.open(release.page_url)
+        return
+
+    size = f"{release.asset_size / 1_000_000:,.0f} MB" if release.asset_size else "about 57 MB"
+    if not window.confirm(
+            f"Update to {release.version}",
+            f"Downloads {size} from GitHub and replaces this application.\n\n"
+            f"Your leads, settings and built sites are separate files and are "
+            f"not touched. The version you are running now is kept beside it "
+            f"until the next launch, so nothing is lost if the new one "
+            f"misbehaves.\n\nYou will need to close and reopen Leadsmith to "
+            f"finish.",
+            f"Download {release.version}"):
+        return
+
+    def work(job: Job):
+        job.report(0, release.asset_size, f"Downloading {release.tag}…")
+
+        def progress(done_bytes: int, total: int) -> bool:
+            return job.report(
+                done_bytes, total,
+                f"Downloading {release.tag} — "
+                f"{done_bytes / 1_000_000:,.0f} of {max(total, 1) / 1_000_000:,.0f} MB")
+
+        downloaded = update.download(release, update.install_dir(), progress)
+        job.report(release.asset_size, release.asset_size, "Checking and installing…")
+        return update.install(downloaded)
+
+    def done(path):
+        window.show_update(None)
+        if window.confirm(
+                f"Version {release.version} is installed",
+                f"It is in place at {path}.\n\n"
+                f"Leadsmith has to close and reopen to run it — this window is "
+                f"still the old version until it does.\n\nClose it now?",
+                "Close Leadsmith"):
+            window.close()
+
+    window.run_job(Job(work), status="Updating…", on_done=done)

@@ -64,6 +64,12 @@ def main() -> int:
         return selftest()
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+    # The build an update replaced, if there was one. It could not be deleted
+    # at the time — it was the file that process was running from — so it is
+    # cleared here, where it is nothing but a stale 57MB beside the exe.
+    import update
+    update.clean_up()
+
     import startup
     # The longest single step, and the one nothing else can report on: by the
     # time this returns, Qt is loaded and the app can speak for itself.

@@ -34,6 +34,42 @@ dies on launch because a module was imported by name and the static analysis
 missed it. That looks like success until someone double-clicks it, so CI runs
 it before publishing anything.
 
+## Releasing
+
+1. Bump `VERSION` in `version.py`. That is the only place the number lives —
+   `pyproject.toml` reads it, and a running copy compares it against the newest
+   release to decide whether to offer an update.
+2. Merge to `main`.
+3. Tag `v<version>` on the merge commit, or run the workflow by hand with
+   `release_tag` set. Either one builds the .exe and attaches it to the release.
+
+**The tag and `version.py` have to agree.** A tag ahead of `version.py` makes
+every installed copy offer an update it is already running, forever. A tag
+behind it hides a real one.
+
+## Updating in place
+
+An installed copy asks GitHub for the newest release a second or two after it
+opens, and puts a bar across the top of the window when there is one. Pressing
+Install downloads the .exe beside the running one, checks it against the SHA-256
+GitHub publishes for that asset, renames the running build to
+`Leadsmith.exe.old` and moves the new file into its place.
+
+Three things are deliberate and worth not undoing:
+
+- **The hash is checked before anything is replaced.** A download that does not
+  match is deleted and the working copy is untouched. An asset with no published
+  digest is not installed at all.
+- **The downloaded file is never executed.** The app asks the operator to close
+  and reopen it; the `.old` is cleared on the next launch. That keeps "we ran
+  what we just downloaded" out of the design entirely.
+- **The check cannot interrupt anything.** No network, a rate limit or a captive
+  portal all return "no update" silently, and the check runs off the job queue
+  that serialises scans, so it can never block one or be blocked by one.
+
+Running from source there is no single file to swap, so the bar links to the
+release notes instead and the update is `git pull`.
+
 ## Why it cannot be built on Linux or a Mac
 
 PyInstaller does not cross-compile: it wraps the Python interpreter of the
