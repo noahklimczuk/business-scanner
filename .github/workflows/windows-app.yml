@@ -65,12 +65,13 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: Install
-        # The dev extra, not a bare install: the smoke test below runs under
-        # pytest, and without it this job fails before it ever reaches the
-        # build — an exe that was never attempted, reported as a broken build.
-        run: |
-          pip install -e ".[dev]"
-          pip install PySide6-Essentials pyinstaller
+        # The extras the project declares, not a hand-written list beside them.
+        # The list version omitted pytest, so the smoke test below died with
+        # "No module named pytest" one second in — and because every later step
+        # depends on it, the build never ran and no .exe was ever uploaded.
+        # `[build]` is the same two packages that were being named here by hand,
+        # which is what let them drift apart in the first place.
+        run: pip install -e ".[dev,build]"
 
       - name: Smoke test the app offscreen
         run: python -m pytest tests/test_gui.py -q
@@ -84,8 +85,25 @@ jobs:
         # A build that produces an exe which crashes on launch is worse than a
         # failed build, because it looks like success. --selftest exits 0 after
         # constructing the window without showing it.
+        #
+        # Start-Process rather than calling the exe directly: this is a windowed
+        # build (console=False), and PowerShell does not wait on a GUI-subsystem
+        # process — it returns the moment the process is spawned, so a plain
+        # `dist\Leadsmith.exe --selftest` reports success against an executable
+        # that went on to crash a second later. That would defeat the only step
+        # here whose job is to catch exactly that.
         run: |
-          dist\Leadsmith.exe --selftest
+          $p = Start-Process -FilePath dist\Leadsmith.exe -ArgumentList '--selftest' -PassThru
+          # And a bound wait, because a hang would otherwise sit on the runner
+          # until the six-hour job limit rather than failing.
+          if (-not $p.WaitForExit(120000)) {
+            $p.Kill()
+            throw "Leadsmith.exe --selftest did not exit within 120s"
+          }
+          if ($p.ExitCode -ne 0) {
+            throw "Leadsmith.exe --selftest exited $($p.ExitCode)"
+          }
+          Write-Host "selftest ok"
         env:
           QT_QPA_PLATFORM: offscreen
 

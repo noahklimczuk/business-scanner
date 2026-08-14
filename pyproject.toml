@@ -25,7 +25,9 @@ dev = ["pytest>=8.0"]
 # The desktop app. Optional so a CLI-only checkout stays small — the GUI tests
 # skip themselves when it is absent.
 gui = ["PySide6-Essentials>=6.6"]
-build = ["PySide6-Essentials>=6.6", "pyinstaller>=6.3", "pillow>=10.0"]
+# Everything the Windows job needs on top of `dev`. No Pillow: PyInstaller only
+# needs it to convert an icon into .ico, and build/leadsmith.ico is already one.
+build = ["PySide6-Essentials>=6.6", "pyinstaller>=6.3"]
 
 [project.scripts]
 leadsmith = "cli:app"
