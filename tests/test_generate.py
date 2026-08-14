@@ -412,3 +412,31 @@ def test_copy_that_breaks_the_rules_is_still_refused_from_a_free_service(monkeyp
     with pytest.raises(generate.ContentError, match="rating or review count"):
         generate.write_copy(LEAD, "Newmarket, ON",
                             provider={"provider": "groq", "api_key": "k"})
+
+
+def test_the_service_is_asked_which_models_it_has(monkeypatch):
+    """Model names change; a table in this file would be wrong by the time
+    anyone read it, so the answer comes from the service."""
+    class FakeGet(FakePost):
+        def __call__(self, url, headers=None, timeout=None):
+            self.sent = {"url": url, "headers": headers}
+            return self
+
+    get = FakeGet(payload={"data": [
+        {"id": "models/gemini-3.6-flash"}, {"id": "models/gemini-3.5-flash"}]})
+    monkeypatch.setattr("requests.get", get)
+
+    names = generate.list_models(generate.resolve_provider(
+        {"provider": "gemini", "api_key": "k"}))
+
+    assert get.sent["url"].endswith("/models")
+    # Namespaced ids are accepted either way; the bare name is what a person
+    # recognises and what the Model box wants.
+    assert names == ["gemini-3.5-flash", "gemini-3.6-flash"]
+
+
+def test_a_model_name_that_no_longer_exists_says_how_to_find_one(monkeypatch):
+    monkeypatch.setattr("requests.post", FakePost(status_code=404, text="not found"))
+    with pytest.raises(generate.ContentError, match="Check lists the ones"):
+        generate.write_copy(LEAD, provider={
+            "provider": "gemini", "api_key": "k", "model": "gemini-1.0-ancient"})

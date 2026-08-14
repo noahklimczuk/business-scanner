@@ -570,6 +570,84 @@ def _message(facts: str, correction: str = "") -> str:
             f"return the whole object again:\n{correction}")
 
 
+def _endpoint(spec: dict[str, Any]) -> tuple[str, dict[str, str]]:
+    base = str(spec.get("base_url") or "").strip().rstrip("/")
+    if not base:
+        raise ContentError(
+            f"No address for {spec['label']}. Settings → Copywriter → Address "
+            "needs the base URL of an OpenAI-compatible API, ending in /v1."
+        )
+    headers = {"Content-Type": "application/json"}
+    if spec.get("api_key"):
+        headers["Authorization"] = f"Bearer {spec['api_key']}"
+    return base, headers
+
+
+def _raise_for_status(spec: dict[str, Any], response: Any) -> None:
+    """Turn an HTTP failure into a sentence the operator can act on."""
+    if response.status_code in (401, 403):
+        raise ContentError(
+            f"{spec['label']} rejected the key. Check Settings → Copywriter — "
+            f"a key for one service will not work on another."
+        )
+    if response.status_code == 404:
+        # Nearly always a model name, because the address is fixed for the
+        # named services and model names change every few months.
+        raise ContentError(
+            f"{spec['label']} has no model called \"{spec.get('model')}\".\n"
+            "Model names change. Settings → Copywriter → Check lists the ones "
+            "your key can actually use right now."
+        )
+    if response.status_code == 429:
+        # The expected failure on a free tier, so it gets its own sentence
+        # rather than being lumped in with a generic HTTP error.
+        raise ContentError(
+            f"{spec['label']} says you have hit its rate limit.\n"
+            "Free tiers cap requests per minute and per day. Wait and build "
+            "again — nothing was lost, and the lead is still on the list."
+        )
+    if response.status_code >= 400:
+        raise ContentError(
+            f"{spec['label']} returned HTTP {response.status_code}:\n"
+            f"  {response.text[:300].strip()}"
+        )
+
+
+def list_models(spec: dict[str, Any]) -> list[str]:
+    """Ask the service which models this key can actually use.
+
+    Model names change every few months, vary by provider tier, and differ
+    between two keys for the same service — so the honest answer to "which one
+    do I put here" comes from the service, not from a table baked into this
+    file that is wrong by the time someone reads it.
+    """
+    import requests
+
+    if spec.get("api") != "openai":
+        return [spec["model"]] if spec.get("model") else []
+    base, headers = _endpoint(spec)
+    try:
+        response = requests.get(f"{base}/models", headers=headers, timeout=30)
+    except requests.RequestException as exc:
+        raise ContentError(
+            f"Could not reach {spec['label']} at {base} ({exc.__class__.__name__}).\n"
+            "Check the address in Settings, and that this machine is online."
+        ) from exc
+
+    _raise_for_status(spec, response)
+    try:
+        data = (response.json() or {}).get("data") or []
+    except ValueError as exc:
+        raise ContentError(
+            f"{spec['label']} did not answer with a model list. It may not be "
+            "OpenAI-compatible enough for this."
+        ) from exc
+    # Some services namespace the id ("models/gemini-3.6-flash"); the call
+    # accepts either, but the bare name is what a person recognises.
+    return sorted({str(m.get("id", "")).split("/")[-1]
+                   for m in data if m.get("id")})
+
+
 def _call_openai(spec: dict[str, Any], facts: str,
                  correction: str = "") -> tuple[dict[str, Any], Any]:
     """One turn against anything that speaks OpenAI's /chat/completions.
@@ -580,12 +658,7 @@ def _call_openai(spec: dict[str, Any], facts: str,
     """
     import requests
 
-    base = str(spec.get("base_url") or "").strip().rstrip("/")
-    if not base:
-        raise ContentError(
-            f"No address for {spec['label']}. Settings → Copywriter → Address "
-            "needs the base URL of an OpenAI-compatible API, ending in /v1."
-        )
+    base, headers = _endpoint(spec)
     if not str(spec.get("model") or "").strip():
         raise ContentError(
             f"No model name for {spec['label']}. Settings → Copywriter → Model "
@@ -608,9 +681,6 @@ def _call_openai(spec: dict[str, Any], facts: str,
                             "strict": True},
         },
     }
-    headers = {"Content-Type": "application/json"}
-    if spec.get("api_key"):
-        headers["Authorization"] = f"Bearer {spec['api_key']}"
 
     try:
         response = requests.post(f"{base}/chat/completions", json=payload,
@@ -621,24 +691,7 @@ def _call_openai(spec: dict[str, Any], facts: str,
             "Check the address in Settings, and that this machine is online."
         ) from exc
 
-    if response.status_code == 401 or response.status_code == 403:
-        raise ContentError(
-            f"{spec['label']} rejected the key. Check Settings → Copywriter — "
-            f"a key for one service will not work on another."
-        )
-    if response.status_code == 429:
-        # The expected failure on a free tier, so it gets its own sentence
-        # rather than being lumped in with a generic HTTP error.
-        raise ContentError(
-            f"{spec['label']} says you have hit its rate limit.\n"
-            "Free tiers cap requests per minute and per day. Wait and build "
-            "again — nothing was lost, and the lead is still on the list."
-        )
-    if response.status_code >= 400:
-        raise ContentError(
-            f"{spec['label']} returned HTTP {response.status_code}:\n"
-            f"  {response.text[:300].strip()}"
-        )
+    _raise_for_status(spec, response)
 
     try:
         body = response.json()

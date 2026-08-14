@@ -17,6 +17,7 @@ import generate
 import prospect
 from gui.pages import Page
 from gui.widgets import Banner, Card, Field, button, muted, row
+from gui.work import Job
 
 PLACES_HELP = (
     "Finds the businesses. Costs about "
@@ -98,12 +99,15 @@ class SettingsPage(Page):
         self.copy_key = Field("Key", "", "", password=True)
         self.copy_model = Field(
             "Model", "",
-            "Leave blank for this service's default.")
+            "Leave blank for this service's default. Model names change — "
+            "Check asks the service which ones your key can use today.")
         self.copy_url = Field(
             "Address", "https://…/v1",
             "The base URL of an OpenAI-compatible API, ending in /v1.")
         for field in (self.copy_key, self.copy_model, self.copy_url):
             writer.add(field)
+        self.check_button = button("Check", "quiet", self.check_models)
+        writer.box.addLayout(row(self.check_button, stretch_at=1))
         self.body.addWidget(writer)
 
         details = Card("Your details",
@@ -160,6 +164,41 @@ class SettingsPage(Page):
         self.copy_model.input.setPlaceholderText(spec["model"] or "model name")
         # Only the catch-all needs an address; the named services have one.
         self.copy_url.setVisible(name == "custom")
+
+    def check_models(self) -> None:
+        """Ask the service what this key can use, and say so.
+
+        On a worker thread like everything else that touches the network — a
+        settings page that freezes while you are still deciding whether to
+        trust the tool is a bad first impression.
+        """
+        provider = self.provider.currentData() or generate.DEFAULT_PROVIDER
+        spec = generate.resolve_provider({
+            "provider": provider,
+            "api_key": self.copy_key.text(),
+            "model": self.copy_model.text(),
+            # Same rule as save(): a stale address left in a hidden box must not
+            # quietly redirect a named service somewhere else.
+            "base_url": self.copy_url.text() if provider == "custom" else "",
+        })
+        if not spec.get("api_key"):
+            self.copy_key.set_error("Paste the key first, then Check.")
+            return
+
+        def done(names: list[str]) -> None:
+            if not names:
+                self.provider_note.setText(
+                    f"{spec['label']} accepted the key but listed no models.")
+                return
+            shown = "".join(f"<br>&nbsp;&nbsp;{name}" for name in names[:15])
+            more = (f"<br>&nbsp;&nbsp;… and {len(names) - 15} more"
+                    if len(names) > 15 else "")
+            self.provider_note.setText(
+                f"<b>{spec['label']} accepts this key.</b> Models you can use "
+                f"today — put one in the Model box:{shown}{more}")
+
+        self.window_ref.run_job(Job(generate.list_models, spec),
+                                status="Asking the service…", on_done=done)
 
     def refresh(self) -> None:
         cfg = config.load()
