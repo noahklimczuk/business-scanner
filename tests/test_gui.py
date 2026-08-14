@@ -12,7 +12,12 @@ import os
 
 import pytest
 
-pytest.importorskip("PySide6", reason="the desktop app is optional")
+# QtWidgets, not PySide6. The top-level package imports fine from the wheel
+# alone; it is QtWidgets that pulls in the Qt shared objects, so a machine with
+# PySide6 installed but no libEGL passes the first check and then dies on the
+# import below. Guarding on the module that actually has the dependency is what
+# makes "the desktop app is optional" true rather than aspirational.
+pytest.importorskip("PySide6.QtWidgets", reason="the desktop app is optional")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
