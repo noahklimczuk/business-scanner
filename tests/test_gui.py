@@ -285,3 +285,50 @@ def test_the_spec_ships_the_templates_the_app_reads_at_runtime():
     for module in ("segno", "phonenumbers", "anthropic"):
         assert module in spec
     assert "console=False" in spec, "a GUI build must not flash a terminal"
+
+
+# ---------------------------------------------------------------------------
+# Choosing who writes the copy
+# ---------------------------------------------------------------------------
+def test_the_copywriter_choice_round_trips_through_disk(window, app):
+    settings = window.pages[5]
+    settings.google.set_text("AIzaTest")
+    settings.provider.setCurrentIndex(settings.provider.findData("gemini"))
+    settings.copy_key.set_text("AIzaGeminiKey")
+    settings.save()
+
+    import config
+    saved = config.load()
+    assert saved["copy"]["provider"] == "gemini"
+    assert saved["copy"]["api_key"] == "AIzaGeminiKey"
+
+    settings.refresh()
+    assert settings.provider.currentData() == "gemini"
+    assert settings.copy_key.text() == "AIzaGeminiKey"
+
+
+def test_a_key_saved_before_there_was_a_choice_still_works(window, app):
+    """The old top-level anthropic_api_key must not strand an operator."""
+    from gui import actions
+    window.cfg = {"anthropic_api_key": "sk-ant-old", "business": {}, "defaults": {}}
+
+    spec = actions.copywriter(window)
+    assert spec["provider"] == "anthropic"
+    assert spec["api_key"] == "sk-ant-old"
+
+
+def test_a_placeholder_from_the_example_config_is_not_treated_as_a_key(window, app):
+    from gui import actions
+    window.cfg = {"anthropic_api_key": "PASTE_YOUR_ANTHROPIC_API_KEY_HERE",
+                  "business": {}, "defaults": {}}
+    assert not actions.copywriter(window)["api_key"]
+
+
+def test_a_custom_service_needs_an_address_before_it_will_save(window, app):
+    settings = window.pages[5]
+    settings.google.set_text("AIzaTest")
+    settings.provider.setCurrentIndex(settings.provider.findData("custom"))
+    settings.copy_key.set_text("some-key")
+    settings.copy_url.set_text("")
+    settings.save()
+    assert settings.copy_url.error.isVisibleTo(settings.copy_url)

@@ -304,24 +304,24 @@ def build(
     usage = None
 
     if content is None or regenerate:
-        estimate = 0.03
+        spec = generate_mod.provider_from_config(cfg)
+        free = generate_mod.provider_is_free(spec)
+        estimate = 0.0 if free else 0.03
         console.print(Panel(
-            f"Claude writes the copy for [bold]{lead['name']}[/bold]\n"
-            f"estimated spend: [bold]${estimate:,.2f} USD[/bold] "
-            f"[dim]({generate_mod.MODEL})[/dim]",
-            title="about to spend", border_style="cyan", expand=False))
+            f"{spec['label']} writes the copy for [bold]{lead['name']}[/bold]\n"
+            + ("free tier — no charge, but it has daily limits\n" if free
+               else f"estimated spend: [bold]${estimate:,.2f} USD[/bold]\n")
+            + f"[dim]({spec['model']})[/dim]",
+            title="about to build", border_style="cyan", expand=False))
         threshold = float(cfg["defaults"]["confirm_above_usd"])
         if estimate > threshold and not yes:
             if not typer.confirm("  Continue?", default=False):
                 console.print("[dim]cancelled[/dim]")
                 return
         try:
-            key = (cfg.get("anthropic_api_key") or "").strip() or None
-            if key and key.startswith("PASTE_"):
-                key = None
             with console.status("writing copy…"):
                 content, usage = generate_mod.write_copy(
-                    lead, city=cfg["business"].get("home_city", ""), api_key=key,
+                    lead, city=cfg["business"].get("home_city", ""), provider=spec,
                     verified=(saved or {}).get("verified_facts"))
         except generate_mod.ContentError as exc:
             _fail(str(exc))
