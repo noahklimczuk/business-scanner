@@ -159,6 +159,53 @@ def test_five_failures_in_a_row_stops_the_scan(monkeypatch, con):
     assert res.calls_failed < sp.calls
 
 
+def test_progress_is_told_the_running_count(monkeypatch, con):
+    """Three arguments, and the third is unique businesses so far.
+
+    Pinned because the desktop app writes a callback against this shape, and a
+    silent change here reaches the operator as a TypeError mid-scan.
+    """
+    seen = []
+    monkeypatch.setattr(prospect, "search_nearby",
+                        lambda *a, **kw: [raw("dup", "Joe's Plumbing")])
+    sp = prospect.plan(44.05, -79.46, radius_km=2, cell_m=900, types=["plumber"])
+    prospect.run("fake-key", con, sp,
+                 lambda done, total, found: seen.append((done, total, found)))
+
+    assert seen[0] == (1, sp.calls, 1)
+    assert seen[-1] == (sp.calls, sp.calls, 1)
+
+
+def test_a_progress_callback_that_returns_false_stops_the_scan(monkeypatch, con):
+    """How the app's Stop button reaches a module that knows nothing about Qt."""
+    monkeypatch.setattr(prospect, "search_nearby",
+                        lambda *a, **kw: [raw("a", "Joe's Plumbing")])
+    sp = prospect.plan(44.05, -79.46, radius_km=2, cell_m=900, types=["plumber"])
+    assert sp.calls > 1
+
+    res = prospect.run("fake-key", con, sp, lambda done, total, found: False)
+    assert res.calls_made == 1, "the scan kept spending after being told to stop"
+    assert "stopped by you" in res.aborted
+    # Stopping is not discarding: the one call was paid for, so it is kept.
+    assert res.new_leads == 1
+    assert len(db.leads(con)) == 1
+
+
+def test_a_progress_callback_that_returns_nothing_does_not_stop_the_scan(
+        monkeypatch, con):
+    """The CLI's progress bar returns None, and None is not a request to stop.
+
+    Reading the return value for truthiness rather than `is False` would end
+    every command-line scan after its first call.
+    """
+    monkeypatch.setattr(prospect, "search_nearby",
+                        lambda *a, **kw: [raw("a", "Joe's Plumbing")])
+    sp = prospect.plan(44.05, -79.46, radius_km=2, cell_m=900, types=["plumber"])
+    res = prospect.run("fake-key", con, sp, lambda done, total, found: None)
+    assert res.calls_made == sp.calls
+    assert not res.aborted
+
+
 def test_costed_at_the_calls_actually_attempted(monkeypatch, con):
     sp, res = run_with(monkeypatch, con, [raw("a", "Joe's Plumbing")])
     assert res.actual_cost == pytest.approx(

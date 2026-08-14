@@ -143,9 +143,15 @@ def scan(window, town: str, radius_km: float, cell_m: int, *,
             plan = prospect.plan(lat, lng, radius_km, cell_m, label=label)
             job.report(0, plan.calls, f"Searching {label}…")
 
-            def progress(done: int, total: int) -> bool:
-                return job.report(done, total,
-                                  f"Searching {label} — {done} of {total}")
+            # Three parameters because three is what `prospect.ProgressFn`
+            # sends: calls done, calls planned, businesses found so far. Taking
+            # two raised TypeError on the first search of every real scan.
+            # Returning the report tells the scan whether Stop was pressed.
+            def progress(done: int, total: int, found: int) -> bool:
+                return job.report(
+                    done, total,
+                    f"Searching {label} — {done} of {total}, "
+                    f"{found} businesses so far")
 
             result = prospect.run(key, wcon, plan, progress)
             wcon.commit()
@@ -154,7 +160,7 @@ def scan(window, town: str, radius_km: float, cell_m: int, *,
     def done(payload):
         plan, result = payload
         if page:
-            page.show_result([
+            lines = [
                 ("Businesses seen", f"{result.seen:,}"),
                 ("New leads", f"{result.new_leads:,}"),
                 ("Already known", f"{max(0, result.seen - result.new_leads):,}"),
@@ -165,7 +171,34 @@ def scan(window, town: str, radius_km: float, cell_m: int, *,
                                    + (f"   (estimated ${plan.est_cost:,.2f})"
                                       if abs(result.actual_cost - plan.est_cost) > 0.005
                                       else "")),
-            ], f"Scanned {plan.label}")
+            ]
+            # A scan that stopped early still cost money, so saying only how
+            # many leads it found would be the wrong half of the truth.
+            if result.aborted:
+                lines.append(("Stopped early", result.aborted))
+            elif result.errors:
+                lines.append(("First failure", result.errors[0]))
+            # The CLI warns about this and the app was silent about it: cells
+            # that came back full were truncated by Google, so there are
+            # businesses in them nobody has seen.
+            if result.saturated_cells:
+                lines.append((
+                    "Areas too busy to see",
+                    f"{result.saturated_cells:,} of {len(plan.cells):,} cells "
+                    f"filled up — re-run at {max(300, int(plan.cell_m // 2))}m "
+                    f"to see what was cut off"))
+            page.show_result(
+                lines,
+                f"Scan stopped early — {plan.label}" if result.aborted
+                else f"Scanned {plan.label}")
+
+        if result.aborted:
+            # Stay on this page: the reason is in the card above, and moving
+            # the operator to Today would hide the only account of what
+            # happened to the money they just spent.
+            window.toast(f"Scan stopped early. Kept {result.new_leads} new "
+                         f"leads. Spent ${result.actual_cost:,.2f}.")
+            return
         window.toast(f"Found {result.new_leads} new leads. "
                      f"Spent ${result.actual_cost:,.2f}.")
         window.go(0)
