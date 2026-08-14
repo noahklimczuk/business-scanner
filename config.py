@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, Optional
 
 try:  # optional: only needed if the operator keeps the key in .env
     from dotenv import load_dotenv
@@ -66,3 +66,35 @@ def api_key(cfg: dict[str, Any] | None = None) -> str:
             "The key needs Places API (New) enabled, restricted to that API and to your IP."
         )
     return key
+
+
+def save(cfg: dict[str, Any], path: Optional[str] = None) -> str:
+    """Write config.json back out.
+
+    The desktop app needs this; the CLI never did, because the operator edited
+    the file by hand. Written whole rather than merged so that a key deleted in
+    the UI is actually deleted, and written to a temporary file first so a
+    crash mid-write cannot leave the operator with no config and no API keys.
+    """
+    import tempfile
+
+    target = path or CONFIG_PATH
+    directory = os.path.dirname(os.path.abspath(target)) or "."
+    os.makedirs(directory, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(dir=directory, suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(temporary, target)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+        raise
+    # The file holds API keys. On POSIX that means 0600; Windows inherits the
+    # user's directory ACL, which is already per-user.
+    try:
+        os.chmod(target, 0o600)
+    except OSError:
+        pass
+    return target
