@@ -9,6 +9,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a release under this tag, e.g. v0.1.0. Blank builds without releasing."
+        required: false
+        default: ""
 
 jobs:
   test:
@@ -96,7 +101,14 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
+        # Two ways in. A `v*` tag releases what that tag points at, which is the
+        # normal path. `release_tag` on a manual run does the same for a commit
+        # that has no tag yet — the action creates it — which is what makes a
+        # release possible from the Actions tab, without a local tag push.
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          # Empty on a tag push, where the action falls back to the tag in
+          # github.ref. Set only on a manual release.
+          tag_name: ${{ inputs.release_tag }}
           files: dist/Leadsmith.exe
