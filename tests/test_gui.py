@@ -21,7 +21,7 @@ pytest.importorskip("PySide6.QtWidgets", reason="the desktop app is optional")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication                      # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel              # noqa: E402
 
 import db                                                       # noqa: E402
 import design                                                   # noqa: E402
@@ -429,15 +429,30 @@ def test_a_plain_function_is_left_alone(app):
     assert got["result"] == 42
 
 
-def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
-    """Press the button, then run the job on a real worker thread.
+def _place(pid, name):
+    """One business as the Places API hands it over."""
+    return {
+        "id": pid,
+        "displayName": {"text": name},
+        "primaryTypeDisplayName": {"text": "Plumber"},
+        "formattedAddress": "1 Main St, Newmarket, ON",
+        "nationalPhoneNumber": "(905) 555-0123",
+        "location": {"latitude": 44.05, "longitude": -79.46},
+        "rating": 4.5,
+        "userRatingCount": 40,
+        "businessStatus": "OPERATIONAL",
+    }
 
-    Two things this has to do that an easier version of it does not. It runs
-    through the Runner rather than calling `job.run()` inline, because the bug
-    class here is cross-thread use and running on the calling thread cannot
-    reproduce it. And the stubs touch the database with the connection they are
-    handed, because a scan that never queries anything proves nothing about
-    which connection it would have used.
+
+def _scan_job(window, monkeypatch, *, search=None, radius_km=0.5, cell_m=2500,
+              page=None):
+    """Press Scan and hand back the job it queued, plus its done callback.
+
+    The one thing this deliberately does not stub is `prospect.run`. That
+    function decides what it hands the progress callback, and a hand-written
+    stand-in agreeing with the callback proves only that the two stubs agree —
+    which is exactly how `progress() takes 2 positional arguments but 3 were
+    given` reached a release with a green suite. Only Google is faked out.
     """
     import prospect
     from gui import actions
@@ -449,30 +464,243 @@ def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
         db.geocode_cached(con, town)          # the call in the real traceback
         return 44.05, -79.46, "Newmarket, ON"
 
-    def fake_run(key, con, plan, progress):
-        con.execute("SELECT count(*) FROM leads").fetchone()
-        progress(1, 1)
-        return SimpleNamespace(seen=12, new_leads=5, calls_made=8,
-                               calls_failed=0, actual_cost=0.32)
-
     monkeypatch.setattr(prospect, "geocode", fake_geocode)
-    monkeypatch.setattr(prospect, "run", fake_run)
+    monkeypatch.setattr(prospect, "search_nearby",
+                        search or (lambda *a, **kw: [_place("p1", "Joe's Plumbing")]))
 
     captured = {}
     monkeypatch.setattr(window, "run_job",
-                        lambda job, **kw: captured.update(job=job) or True)
+                        lambda job, **kw: captured.update(job=job, kw=kw) or True)
+    actions.scan(window, "Newmarket", radius_km, cell_m, dry_run=False, page=page)
+    return captured["job"], captured["kw"]["on_done"]
 
-    actions.scan(window, "Newmarket", 2.0, 1500, dry_run=False)
 
-    job = captured["job"]
-    failed = {}
+def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
+    """Press the button, then run the real scan on a real worker thread.
+
+    Three things this has to do that an easier version of it does not. It runs
+    through the Runner rather than calling `job.run()` inline, because the bug
+    class here is cross-thread use and running on the calling thread cannot
+    reproduce it. It touches the database on the connection the job was handed,
+    because a scan that never queries anything proves nothing about which
+    connection it would have used. And it drives the genuine `prospect.run`, so
+    the progress callback the app supplies is called the way the scan really
+    calls it.
+    """
+    job, _ = _scan_job(window, monkeypatch)
+
+    failed, progressed = {}, []
     job.signals.failed.connect(lambda m, d: failed.update(message=m, detail=d))
+    job.signals.progress.connect(lambda d, t, m: progressed.append((d, t, m)))
 
     runner = Runner()
     assert runner.start(job) is True
     assert runner.wait(20000), "the scan job never finished"
     app.processEvents()
     assert not failed, failed.get("message")
+
+    assert db.leads(window.con), "the scan saved nothing"
+    # The last update carries the running count, which is the third argument
+    # the app used to refuse.
+    assert any("1 businesses so far" in message for _, _, message in progressed)
+
+
+def test_stop_actually_stops_a_scan(window, app, monkeypatch):
+    """The Stop button is wired to `Job.cancel`; this is the other half of it.
+
+    Cancelling set a flag that `job.report` returned and `prospect.run` threw
+    away, so the button was decoration: a 400-call scan carried on spending
+    after it was pressed. The scan is cancelled from inside the fake search, so
+    the flag is already set when the first progress report goes back.
+    """
+    import prospect
+
+    calls = []
+
+    def search(*a, **kw):
+        calls.append(1)
+        job.cancel()                         # as if Stop were pressed
+        return [_place(f"p{len(calls)}", f"Shop {len(calls)}")]
+
+    job, _ = _scan_job(window, monkeypatch, search=search)
+    plan = prospect.plan(44.05, -79.46, 0.5, 2500)
+    assert plan.calls > 1, "a one-call scan cannot show that it stopped short"
+
+    result = {}
+    job.signals.finished.connect(lambda payload: result.update(payload=payload))
+    job.signals.failed.connect(lambda m, d: result.update(failed=m))
+
+    runner = Runner()
+    assert runner.start(job) is True
+    assert runner.wait(20000)
+    app.processEvents()
+
+    assert "failed" not in result, result.get("failed")
+    _, res = result["payload"]
+    assert len(calls) == 1, "the scan kept spending after Stop"
+    assert "stopped by you" in res.aborted
+    # Stopping is not losing: what was already paid for is saved.
+    assert db.leads(window.con), "the cancelled scan threw away paid-for leads"
+
+
+def test_a_scan_that_stopped_early_says_so(window, app, monkeypatch):
+    """Silence here is the expensive kind.
+
+    The app used to report a scan that died after five straight API failures
+    with the same "Found 0 new leads" as a scan that worked, and then move the
+    operator to another page — so the only account of what happened to the
+    money was a card they had navigated away from.
+    """
+    import prospect
+
+    def always_fail(*a, **kw):
+        raise prospect.PlacesError("HTTP 403 — key rejected")
+
+    find = window.pages[1]
+    window.go(1)
+    # Wide enough to plan more than the five calls it takes to give up, so a
+    # scan that stopped short is distinguishable from one that simply ended.
+    job, on_done = _scan_job(window, monkeypatch, search=always_fail,
+                             radius_km=2, cell_m=900, page=find)
+
+    runner = Runner()
+    assert runner.start(job, on_done=on_done) is True
+    assert runner.wait(20000)
+    app.processEvents()
+
+    shown = find.result.findChildren(QLabel)
+    text = " ".join(label.text() for label in shown)
+    assert "stopped early" in text.lower()
+    assert "403" in text, "the reason it stopped is not on screen"
+    assert window.stack.currentIndex() == 1, \
+        "the operator was moved away from the only record of the failure"
+
+
+# ---------------------------------------------------------------------------
+# The other three buttons that spend money or touch the network. Each runs the
+# real action on a real worker thread with only the outside world faked, for
+# the reason spelled out on `_scan_job`: stubs that agree with each other prove
+# nothing, and these three shipped broken once already.
+# ---------------------------------------------------------------------------
+COPY = {
+    "hero_headline": "Roofing done right in Newmarket",
+    "hero_sub": "Repairs, replacements and flat roofing across York Region.",
+    "about": ["We reroof houses in Newmarket and the towns around it.",
+              "Most jobs start with a look at the roof and a plain answer."],
+    "services": [
+        {"name": "Roof replacement", "description": "Full tear-off and new shingles."},
+        {"name": "Leak repair", "description": "Finding the leak and stopping it."},
+        {"name": "Flat roofing", "description": "Modified bitumen on low-slope roofs."},
+    ],
+    "why_us": ["We answer the phone", "Written scope before work starts",
+               "We clean up the yard"],
+    "cta_line": "Call and we will take a look",
+    "meta_title": "Halstead Roofing — Roofing in Newmarket",
+    "meta_description": "Roof replacement, leak repair and flat roofing in Newmarket.",
+}
+
+
+def _seed_lead(window):
+    lead = {"place_id": "g1", "name": "Halstead Roofing",
+            "category": "Roofing contractor", "phone": "(905) 555-0142",
+            "address": "1 Main St, Newmarket, ON", "website_kind": "none",
+            "rating": 4.6, "review_count": 31}
+    db.upsert_lead(window.con, lead)
+    window.con.commit()
+    return dict(db.get(window.con, "g1"))
+
+
+def _run(job, app, timeout=20000):
+    """Run a job to completion on a worker thread and hand back the outcome."""
+    outcome = {}
+    job.signals.finished.connect(lambda r: outcome.update(result=r))
+    job.signals.failed.connect(lambda m, d: outcome.update(failed=m, detail=d))
+    runner = Runner()
+    assert runner.start(job) is True
+    assert runner.wait(timeout), "the job never finished"
+    app.processEvents()
+    assert "failed" not in outcome, outcome.get("detail") or outcome.get("failed")
+    return outcome["result"]
+
+
+def test_building_a_site_writes_one(window, app, monkeypatch, tmp_path):
+    """Everything but the model call is real: copy review, render, disk, db."""
+    import generate
+    from gui import actions
+
+    monkeypatch.setattr(generate, "SITES_DIR", str(tmp_path / "sites"))
+    monkeypatch.setattr(generate, "_client", lambda key=None: SimpleNamespace())
+    monkeypatch.setattr(generate, "_call",
+                        lambda client, facts, correction="", model=None: (
+                            COPY, SimpleNamespace(input_tokens=900, output_tokens=700)))
+    window.cfg["copy"] = {"provider": "anthropic", "api_key": "sk-test"}
+    window.cfg.setdefault("business", {})["home_city"] = "Newmarket, ON"
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    captured = {}
+    monkeypatch.setattr(window, "run_job",
+                        lambda job, **kw: captured.update(job=job, kw=kw) or True)
+    actions.build_site(window, _seed_lead(window))
+
+    path = _run(captured["job"], app)
+    assert os.path.exists(path), "the button reported a page that is not there"
+    assert "Halstead Roofing" in open(path, encoding="utf-8").read()
+    # The worker's own connection has to be the one that committed this.
+    assert db.get(window.con, "g1")["site_dir"], "the site was never recorded"
+    assert generate.load_content("g1")["copy"] == COPY
+
+
+def test_publishing_a_site_records_the_url(window, app, monkeypatch, tmp_path):
+    import deploy
+    import generate
+    from gui import actions
+
+    monkeypatch.setattr(generate, "SITES_DIR", str(tmp_path / "sites"))
+    lead = _seed_lead(window)
+    generate.write_site("g1", generate.render(
+        lead, {**COPY, "verified_facts": [], "photos": []},
+        template="trade", preview=True))
+
+    monkeypatch.setattr(deploy, "wrangler_path", lambda: "/usr/bin/wrangler")
+    monkeypatch.setattr(deploy, "deploy", lambda site_dir, project, **kw:
+                        SimpleNamespace(url="https://abc.leadsmith-previews.pages.dev",
+                                        project=project, files=2, bytes=2048))
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    captured = {}
+    monkeypatch.setattr(window, "run_job",
+                        lambda job, **kw: captured.update(job=job) or True)
+    actions.preview_site(window, lead)
+
+    result = _run(captured["job"], app)
+    assert result.url.endswith("pages.dev")
+    assert db.get(window.con, "g1")["preview_url"] == result.url
+
+
+def test_checking_stripe_runs_on_a_worker_and_commits(window, app, monkeypatch):
+    import billing
+    from gui import actions
+
+    window.cfg["stripe_secret_key"] = "sk_test_123"
+    seen = {}
+
+    def fake_sync(con, key):
+        # The connection has to be usable from this thread, which is the whole
+        # reason the action opens its own instead of borrowing the window's.
+        con.execute("SELECT count(*) FROM subscriptions").fetchone()
+        seen["key"] = key
+        return SimpleNamespace(matched=3, problems=[])
+
+    monkeypatch.setattr(billing, "sync", fake_sync)
+
+    captured = {}
+    monkeypatch.setattr(window, "run_job",
+                        lambda job, **kw: captured.update(job=job) or True)
+    actions.sync_billing(window)
+
+    result = _run(captured["job"], app)
+    assert seen["key"] == "sk_test_123"
+    assert result.matched == 3
 
 
 # ---------------------------------------------------------------------------

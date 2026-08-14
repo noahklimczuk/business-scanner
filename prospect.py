@@ -443,14 +443,23 @@ def plan(lat: float, lng: float, radius_km: float, cell_m: float,
                     types=chosen, cells=cells, batches=batches, label=label)
 
 
-ProgressFn = Callable[[int, int, int], None]
+# Called after every search with (calls done, calls planned, businesses found
+# so far). Return False to stop the scan; anything else, None included, carries
+# on — the CLI's progress bar returns nothing and must not read as "stop".
+ProgressFn = Callable[[int, int, int], Optional[bool]]
+
+
+class _Cancelled(Exception):
+    """The progress callback asked us to stop. Never leaves this module."""
 
 
 def run(api_key: str, con: Any, sp: ScanPlan,
         progress: Optional[ProgressFn] = None) -> ScanResult:
     """Execute a planned scan. Results are written once, at the end.
 
-    Ctrl-C stops calling Google but still saves everything already paid for.
+    Ctrl-C stops calling Google but still saves everything already paid for, and
+    so does a `progress` callback that returns False — that is how the desktop
+    app's Stop button reaches in here without this module knowing about Qt.
     """
     res = ScanResult()
     records: dict[str, dict[str, Any]] = {}
@@ -493,9 +502,11 @@ def run(api_key: str, con: Any, sp: ScanPlan,
                         continue
                     records[rec["place_id"]] = rec
 
-                if progress:
-                    progress(done, sp.calls, len(records))
-    except KeyboardInterrupt:
+                # `is False`, not falsiness: a callback that returns None is
+                # the common case and means nothing at all.
+                if progress and progress(done, sp.calls, len(records)) is False:
+                    raise _Cancelled
+    except (KeyboardInterrupt, _Cancelled):
         res.aborted = f"stopped by you after {done} of {sp.calls} calls"
     except PlacesError as exc:
         res.aborted = str(exc)

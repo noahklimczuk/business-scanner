@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leadsmith"
-version = "0.2.4"
+version = "0.2.5"
 description = "Find businesses with no website, build them one, sell it in person."
 requires-python = ">=3.11"
 dependencies = [
