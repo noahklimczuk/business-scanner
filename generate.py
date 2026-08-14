@@ -142,8 +142,13 @@ def provider_from_config(cfg: Optional[dict[str, Any]] = None) -> dict[str, Any]
     settings = dict(cfg.get("copy") or {})
     if not settings.get("api_key"):
         legacy = str(cfg.get("anthropic_api_key") or "").strip()
-        if legacy and not legacy.startswith("PASTE_"):
-            settings.setdefault("provider", "anthropic")
+        # Only ever onto Anthropic. An earlier version attached this key to
+        # whichever service happened to be selected, so an operator who picked
+        # a different one and left the key box empty got their Anthropic key
+        # pointed at a third party's address — a leak, not just a wrong call.
+        chosen = str(settings.get("provider") or DEFAULT_PROVIDER).strip().lower()
+        if legacy and not legacy.startswith("PASTE_") and chosen == "anthropic":
+            settings["provider"] = "anthropic"
             settings["api_key"] = legacy
     return resolve_provider(settings)
 

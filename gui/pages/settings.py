@@ -256,8 +256,13 @@ class SettingsPage(Page):
                 return
 
         provider = self.provider.currentData() or generate.DEFAULT_PROVIDER
-        if provider == "custom" and self.copy_key.text() and not self.copy_url.text():
-            self.copy_url.set_error("An OpenAI-compatible address is required.")
+        # Whenever custom is chosen, not only when a key is already pasted:
+        # without an address this setting cannot ever work, and the failure
+        # would otherwise surface halfway through building a client's site.
+        if provider == "custom" and not self.copy_url.text():
+            self.copy_url.set_error(
+                "This service needs an address. Paste one ending in /v1, or "
+                "pick Gemini or Groq above — those have theirs built in.")
             return
 
         cfg = dict(config.load())
