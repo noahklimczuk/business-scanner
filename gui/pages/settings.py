@@ -71,6 +71,14 @@ class SettingsPage(Page):
     def __init__(self, window, parent=None):
         super().__init__(window, parent)
 
+        # A form is not a view of the database. Everything else in the app can
+        # redraw itself from disk whenever the shell asks; this page holds work
+        # in progress that exists nowhere else yet, so it tracks whether it has
+        # any and refuses to overwrite it. `_loading` keeps filling the fields
+        # from disk from registering as the operator typing.
+        self._dirty = False
+        self._loading = False
+
         self.banner = Banner("", "accent")
         self.banner.setVisible(False)
         self.body.addWidget(self.banner)
@@ -148,9 +156,23 @@ class SettingsPage(Page):
         self.body.addWidget(self.path_note)
         self.body.addLayout(row(
             button("Save", "primary", self.save),
-            button("Reload", "quiet", self.refresh),
+            # `load`, not `refresh`: Reload is the operator asking for the
+            # saved values back, so it is the one place discarding their
+            # unsaved edits is what they meant.
+            button("Reload", "quiet", self.load),
             stretch_at=2))
         self.body.addStretch(1)
+
+        for field in (self.google, self.stripe, self.copy_key, self.copy_model,
+                      self.copy_url, self.operator, self.legal, self.phone,
+                      self.email, self.city, self.nmd_monthly,
+                      self.standard_setup, self.standard_monthly):
+            field.changed.connect(lambda _: self._mark_dirty())
+        self.provider.currentIndexChanged.connect(lambda _: self._mark_dirty())
+
+    def _mark_dirty(self) -> None:
+        if not self._loading:
+            self._dirty = True
 
     def _provider_changed(self) -> None:
         """Retune the fields around the chosen service."""
@@ -201,6 +223,30 @@ class SettingsPage(Page):
                                 status="Asking the service…", on_done=done)
 
     def refresh(self) -> None:
+        """The shell's hook: navigation, F5, and the end of every job.
+
+        It must not throw away what the operator has typed. `run_job` refreshes
+        the current page when a job finishes, and Check is a job started from
+        this page — so reloading unconditionally meant that pressing Check to
+        confirm a copywriter key silently blanked that key, put the service
+        back to Anthropic, and took the Google Places key with it.
+        """
+        self.window_ref.cfg = config.load()
+        if self._dirty:
+            self._show_path_and_banner()
+            return
+        self.load()
+
+    def load(self) -> None:
+        """Fill every field from config.json, discarding anything unsaved."""
+        self._loading = True
+        try:
+            self._load()
+        finally:
+            self._loading = False
+        self._dirty = False
+
+    def _load(self) -> None:
         cfg = config.load()
         self.window_ref.cfg = cfg
         business = cfg.get("business", {})
@@ -236,6 +282,10 @@ class SettingsPage(Page):
             # were real keys would be a lie the operator only catches later.
             field.set_text("" if text.startswith("PASTE_") else text)
 
+        self._show_path_and_banner()
+
+    def _show_path_and_banner(self) -> None:
+        """Reads the form, not the file, so it is honest either way."""
         self.path_note.setText(f"Saved to {config.CONFIG_PATH}")
         if not self.google.text():
             self.banner.set_message(
@@ -302,4 +352,6 @@ class SettingsPage(Page):
 
         self.window_ref.cfg = config.load()
         self.window_ref.toast(f"Saved to {path}")
-        self.refresh()
+        # `load`, not `refresh`: the form now matches the file, and reading it
+        # back is what clears the unsaved-edits flag.
+        self.load()

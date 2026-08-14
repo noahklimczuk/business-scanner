@@ -368,6 +368,62 @@ def test_a_placeholder_from_the_example_config_is_not_treated_as_a_key(window, a
     assert not actions.copywriter(window)["api_key"]
 
 
+def test_checking_a_key_does_not_wipe_what_was_typed(window, app, monkeypatch):
+    """Check is a job, and every finished job refreshes the current page.
+
+    That refresh reloaded Settings from config.json, so pressing Check to
+    confirm a copywriter key blanked the key, put the service back to
+    Anthropic, and took the unsaved Google Places key with it — on the one
+    page where nothing has been written to disk yet.
+    """
+    import generate
+    monkeypatch.setattr(generate, "list_models", lambda spec: ["gemini-2.5-flash"])
+
+    settings = window.pages[5]
+    window.go(5)
+    settings.provider.setCurrentIndex(settings.provider.findData("gemini"))
+    settings.copy_key.set_text("AIzaGeminiKey")
+    settings.google.set_text("AIzaPlacesKey")
+
+    settings.check_models()
+    assert window.runner.wait(20000), "the model check never finished"
+    app.processEvents()
+
+    assert settings.provider.currentData() == "gemini"
+    assert settings.copy_key.text() == "AIzaGeminiKey"
+    assert settings.google.text() == "AIzaPlacesKey"
+    assert "accepts this key" in settings.provider_note.text()
+
+
+def test_unsaved_settings_survive_a_refresh_but_not_a_reload(window, app):
+    """Navigation and F5 must not eat a half-filled form; Reload must.
+
+    Reload is the operator asking for the saved values back, so it is the one
+    place discarding what they typed is what they meant.
+    """
+    settings = window.pages[5]
+    settings.google.set_text("AIzaTest")
+    settings.provider.setCurrentIndex(settings.provider.findData("gemini"))
+    settings.copy_key.set_text("AIzaGeminiKey")
+    settings.save()
+
+    settings.provider.setCurrentIndex(settings.provider.findData("groq"))
+    settings.copy_key.set_text("gsk_unsaved")
+
+    window.go(0)
+    window.go(5)
+    app.processEvents()
+    assert settings.provider.currentData() == "groq"
+    assert settings.copy_key.text() == "gsk_unsaved"
+
+    window.refresh()                      # F5
+    assert settings.copy_key.text() == "gsk_unsaved"
+
+    settings.load()                       # the Reload button
+    assert settings.provider.currentData() == "gemini"
+    assert settings.copy_key.text() == "AIzaGeminiKey"
+
+
 def test_a_custom_service_needs_an_address_before_it_will_save(window, app):
     settings = window.pages[5]
     settings.google.set_text("AIzaTest")
