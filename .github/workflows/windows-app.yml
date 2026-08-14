@@ -48,14 +48,23 @@ jobs:
   build:
     needs: test
     runs-on: windows-latest
+    # Needed by the release step below. The default token is read-only on this
+    # repository, and without this a `v*` tag builds the exe, uploads it as a
+    # 90-day artifact, and then fails at the last step with a 403 — the one run
+    # where the permanent download link was the entire point.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
 
       - name: Install
+        # The dev extra, not a bare install: the smoke test below runs under
+        # pytest, and without it this job fails before it ever reaches the
+        # build — an exe that was never attempted, reported as a broken build.
         run: |
-          pip install -e .
+          pip install -e ".[dev]"
           pip install PySide6-Essentials pyinstaller
 
       - name: Smoke test the app offscreen
