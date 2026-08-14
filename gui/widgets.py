@@ -222,8 +222,13 @@ class Banner(QFrame):
         self.label = QLabel(text)
         self.label.setWordWrap(True)
         box.addWidget(self.label, 1)
+        # Kept rather than dropped into the layout and forgotten: the update
+        # bar is one banner whose button says either Install or Open the page,
+        # depending on whether this build can replace itself.
+        self.action_button = None
         if action and on_action:
-            box.addWidget(button(action, "primary", on_action))
+            self.action_button = button(action, "primary", on_action)
+            box.addWidget(self.action_button)
 
     def set_message(self, text: str, tone: str = "warn") -> None:
         self.label.setText(text)

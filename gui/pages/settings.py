@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QComboBox, QGridLayout, QLabel
 import config
 import generate
 import prospect
+import update
 from gui.pages import Page
 from gui.widgets import Banner, Card, Field, button, muted, row
 from gui.work import Job
@@ -152,6 +153,14 @@ class SettingsPage(Page):
         prices.add_layout(price_grid)
         self.body.addWidget(prices)
 
+        about = Card("This version")
+        self.version_note = muted("")
+        self.version_note.setTextFormat(Qt.RichText)
+        about.add(self.version_note)
+        self.update_button = button("Check for updates", "quiet", self.check_update)
+        about.box.addLayout(row(self.update_button, stretch_at=1))
+        self.body.addWidget(about)
+
         self.path_note = muted("")
         self.body.addWidget(self.path_note)
         self.body.addLayout(row(
@@ -173,6 +182,33 @@ class SettingsPage(Page):
     def _mark_dirty(self) -> None:
         if not self._loading:
             self._dirty = True
+
+    def check_update(self) -> None:
+        """Ask now, rather than waiting for the check at the next launch.
+
+        The banner across the top is the same one the automatic check raises;
+        this only adds the answer nobody else gives you, which is "no, you are
+        already on the newest one".
+        """
+        self.update_button.setEnabled(False)
+        self.version_note.setText("Asking GitHub…")
+
+        def done(release) -> None:
+            self.update_button.setEnabled(True)
+            self._show_version(release)
+
+        self.window_ref.check_for_update(announce=True, on_done=done)
+
+    def _show_version(self, release=None) -> None:
+        line = f"You are running <b>Leadsmith {update.VERSION}</b>."
+        if release is not None:
+            line += (f" Version {release.version} is available — the bar at the "
+                     f"top of the window installs it.")
+        elif not update.can_install():
+            # Run from a checkout. Saying so beats an Install button that
+            # cannot work, and `git pull` is the honest instruction.
+            line += " Running from source, so updates come from <code>git pull</code>."
+        self.version_note.setText(line)
 
     def _provider_changed(self) -> None:
         """Retune the fields around the chosen service."""
@@ -282,6 +318,7 @@ class SettingsPage(Page):
             # were real keys would be a lie the operator only catches later.
             field.set_text("" if text.startswith("PASTE_") else text)
 
+        self._show_version()
         self._show_path_and_banner()
 
     def _show_path_and_banner(self) -> None:

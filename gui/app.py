@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import (
@@ -27,8 +27,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config                                                    # noqa: E402
 import db                                                        # noqa: E402
+import update                                                    # noqa: E402
 from gui import theme                                            # noqa: E402
-from gui.work import Runner                                      # noqa: E402
+from gui.widgets import Banner                                   # noqa: E402
+from gui.work import Runner, run_detached, wait_for_detached     # noqa: E402
 
 APP_NAME = "Leadsmith"
 WINDOW_MIN = (1080, 720)
@@ -130,6 +132,7 @@ class Window(QMainWindow):
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
         self.stack = QStackedWidget()
+        right.addWidget(self._update_bar())
         right.addWidget(self.stack, 1)
         right.addWidget(self._activity_strip())
         outer.addLayout(right, 1)
@@ -141,8 +144,54 @@ class Window(QMainWindow):
         self._shortcuts()
         self.go(0)
         QTimer.singleShot(80, self._first_run_check)
+        # After the window is up and the first-run check has had its say. A
+        # release published while the app was closed is not urgent enough to
+        # compete with either.
+        QTimer.singleShot(1500, self.check_for_update)
 
     # -- chrome ------------------------------------------------------------
+    def _update_bar(self) -> QWidget:
+        """A line above every page when a newer build exists.
+
+        In the shell rather than on a page because it is true wherever the
+        operator happens to be, and because the one place they would never
+        think to look for it is Settings.
+        """
+        self._update: Optional[Any] = None
+        self.update_banner = Banner("", "accent", "Install", self._update_action)
+        self.update_banner.setVisible(False)
+        return self.update_banner
+
+    def show_update(self, release) -> None:
+        """Called with a release to announce, or None to take the bar down."""
+        self._update = release
+        if release is None:
+            self.update_banner.setVisible(False)
+            return
+
+        if release.installable:
+            self.update_banner.action_button.setText(f"Install {release.version}")
+            message = (f"Version {release.version} is out — you are running "
+                       f"{update.VERSION}.")
+        else:
+            # Running from source, or a release with nothing attached to it.
+            # Offering an Install button that cannot work would be worse than
+            # sending them to the page that can.
+            self.update_banner.action_button.setText("What changed")
+            message = (f"Version {release.version} is out — you are running "
+                       f"{update.VERSION}. This copy cannot update itself.")
+        self.update_banner.set_message(message, "accent")
+        self.update_banner.setVisible(True)
+
+    def _update_action(self) -> None:
+        from gui import actions
+        if self._update is not None:
+            actions.install_update(self, self._update)
+
+    def check_for_update(self, *, announce: bool = False, on_done=None) -> None:
+        from gui import actions
+        actions.check_for_update(self, announce=announce, on_done=on_done)
+
     def _activity_strip(self) -> QWidget:
         strip = QFrame()
         strip.setObjectName("ActivityStrip")
@@ -284,6 +333,15 @@ class Window(QMainWindow):
 
         return self.runner.start(job, on_done=done, on_fail=fail)
 
+    def run_quietly(self, job, *, on_done=None, on_fail=None) -> None:
+        """Run something in the background without touching the activity strip.
+
+        `run_job` is for work the operator started and is waiting on: it takes
+        the progress bar, shows a status, and refuses a second job. An update
+        check is none of those things, so it stays out of that queue entirely.
+        """
+        run_detached(job, on_done=on_done, on_fail=on_fail)
+
     def _on_progress(self, done: int, total: int, message: str) -> None:
         if total > 0:
             self.progress.setRange(0, total)
@@ -334,6 +392,9 @@ class Window(QMainWindow):
                 return
             self.runner.cancel()
             self.runner.wait(5000)
+        # An update check may still be in flight; it has nowhere to report to
+        # once this window is gone.
+        wait_for_detached(3000)
         self.con.close()
         event.accept()
 

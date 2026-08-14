@@ -112,6 +112,48 @@ def _human(exc: BaseException) -> str:
     return f"{named}: {message}" if message else named
 
 
+# Jobs running outside the Runner, held here until they finish.
+#
+# Nothing else refers to a detached job: the thread pool owns the C++ side, and
+# the Python object it was created from is free to be collected the moment the
+# caller returns — taking `job.signals` with it, so the job dies on its last
+# line with "Signal source has been deleted" and the result is never delivered.
+# The Runner never had this problem because `_current` is a reference.
+_DETACHED: set = set()
+
+
+def run_detached(job: "Job", *, on_done: Optional[Callable[[Any], None]] = None,
+                 on_fail: Optional[Callable[[str, str], None]] = None) -> None:
+    """Start a job nobody is waiting on, off the one-at-a-time queue.
+
+    The Runner exists to stop two jobs that spend money or write the same files
+    from overlapping, and it refuses a second job while one is running. Work
+    that costs nothing and that the operator did not ask for — the update check
+    — must not sit in that queue, or it would block their first scan at launch
+    and be blocked by a long one.
+    """
+    if on_done:
+        job.signals.finished.connect(on_done)
+    job.signals.failed.connect(on_fail or (lambda message, detail: None))
+    _DETACHED.add(job)
+    job.signals.finished.connect(lambda *_: _DETACHED.discard(job))
+    job.signals.failed.connect(lambda *_: _DETACHED.discard(job))
+    QThreadPool.globalInstance().start(job)
+
+
+def wait_for_detached(ms: int = 3000) -> bool:
+    """Let detached jobs finish before the app is torn down around them.
+
+    Nothing is lost if one is still in flight at closing time — an update check
+    that does not finish is an update check — but a job that returns into a
+    half-destroyed window emits into objects that are already gone, which Qt
+    reports on the way out as "Signal source has been deleted". Waiting the
+    couple of hundred milliseconds it actually needs is cheaper than explaining
+    that message to somebody.
+    """
+    return QThreadPool.globalInstance().waitForDone(ms)
+
+
 class Runner(QObject):
     """Owns the thread pool and refuses to run two jobs at once.
 

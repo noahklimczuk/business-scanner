@@ -9,6 +9,7 @@ These skip cleanly when PySide6 is not installed, so the CLI-only checkout is
 unaffected.
 """
 import os
+import time
 
 import pytest
 
@@ -33,6 +34,30 @@ from types import SimpleNamespace                               # noqa: E402
 @pytest.fixture(scope="session")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def no_update_check(monkeypatch):
+    """The window arms an update check 1.5s after it opens.
+
+    Any test whose event loop runs that long would otherwise call the real
+    GitHub API — a suite that fails when GitHub is slow, and a request from CI
+    on every run. Tests that care about the check patch it again with whatever
+    they want it to find.
+
+    The wait on the way out drains anything still in flight, so a detached job
+    cannot come back to a window that pytest has already torn down.
+    """
+    import update
+    from gui.work import wait_for_detached
+
+    def explode(*a, **kw):
+        raise AssertionError("a test tried to reach GitHub")
+
+    monkeypatch.setattr(update, "check", lambda *a, **kw: None)
+    monkeypatch.setattr(update.requests, "get", explode)
+    yield
+    wait_for_detached(5000)
 
 
 @pytest.fixture
@@ -757,6 +782,216 @@ def test_checking_stripe_runs_on_a_worker_and_commits(window, app, monkeypatch):
     result = _run(captured["job"], app)
     assert seen["key"] == "sk_test_123"
     assert result.matched == 3
+
+
+# ---------------------------------------------------------------------------
+# Updating
+# ---------------------------------------------------------------------------
+def a_release(version="0.9.9", *, installable=True):
+    import update
+    return update.Release(
+        version=version, tag=f"v{version}", notes="what changed",
+        page_url=f"https://github.com/{update.REPO}/releases/tag/v{version}",
+        asset_url=(f"https://github.com/{update.REPO}/releases/download/"
+                   f"v{version}/Leadsmith.exe") if installable else "",
+        asset_size=57_000_000, digest="sha256:" + "ab" * 32)
+
+
+def wait_for_update_check(window, app, timeout=10.0):
+    deadline = time.time() + timeout
+    while not window.update_banner.isVisibleTo(window) and time.time() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    app.processEvents()
+
+
+def test_a_newer_release_raises_a_bar_over_every_page(window, app, monkeypatch):
+    import update
+    monkeypatch.setattr(update, "check", lambda *a, **kw: a_release("0.9.9"))
+    monkeypatch.setattr(update, "can_install", lambda: True)
+
+    assert not window.update_banner.isVisibleTo(window)
+    window.check_for_update()
+    wait_for_update_check(window, app)
+
+    assert window.update_banner.isVisibleTo(window)
+    assert "0.9.9" in window.update_banner.label.text()
+    assert update.VERSION in window.update_banner.label.text()
+    assert "Install" in window.update_banner.action_button.text()
+
+    # In the shell, not on a page: it is true wherever the operator is.
+    for index in range(window.stack.count()):
+        window.go(index)
+        app.processEvents()
+        assert window.update_banner.isVisibleTo(window)
+
+
+def test_being_up_to_date_says_nothing_at_all(window, app, monkeypatch):
+    import update
+    monkeypatch.setattr(update, "check", lambda *a, **kw: None)
+    window.check_for_update()
+    for _ in range(50):
+        app.processEvents()
+        time.sleep(0.01)
+    assert not window.update_banner.isVisibleTo(window)
+
+
+def test_a_source_checkout_is_not_offered_an_install_button(window, app, monkeypatch):
+    """There is no single file to swap, so it points at the page instead."""
+    import update
+    monkeypatch.setattr(update, "check", lambda *a, **kw: a_release("0.9.9",
+                                                                   installable=False))
+    window.check_for_update()
+    wait_for_update_check(window, app)
+
+    assert window.update_banner.isVisibleTo(window)
+    assert "cannot update itself" in window.update_banner.label.text()
+    assert "Install" not in window.update_banner.action_button.text()
+
+
+def test_a_failed_check_never_reaches_the_operator(window, app, monkeypatch):
+    """Offline at a client's door is not news, and must not raise a dialog."""
+    import update
+    def offline(*a, **kw):
+        raise OSError("no route to host")
+    monkeypatch.setattr(update, "check", offline)
+
+    shown = []
+    monkeypatch.setattr(window, "error", lambda *a, **k: shown.append(a))
+
+    window.check_for_update()                 # the silent check at launch
+    for _ in range(50):
+        app.processEvents()
+        time.sleep(0.01)
+
+    assert shown == []
+    assert not window.update_banner.isVisibleTo(window)
+
+
+def test_the_update_check_does_not_block_a_scan(window, app, monkeypatch):
+    """`run_job` refuses a second job on purpose — two scans would double-spend.
+
+    An update check must not sit in that queue: at launch it would block the
+    operator's first scan, and a long scan would swallow the check.
+    """
+    import threading
+    import update
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_check(*a, **kw):
+        started.set()
+        release.wait(5)
+        return None
+
+    monkeypatch.setattr(update, "check", slow_check)
+    window.check_for_update()
+    assert started.wait(5), "the check never ran"
+
+    # The queue that guards money is still free while that is in flight.
+    assert not window.runner.busy
+    assert window.run_job(Job(lambda: "scan"), status="Scanning…") is True
+    assert window.runner.wait(5000)
+
+    release.set()
+    from gui.work import wait_for_detached
+    assert wait_for_detached(5000), "the detached check never finished"
+    app.processEvents()
+
+
+def test_installing_downloads_verifies_and_swaps(window, app, monkeypatch, tmp_path):
+    """The whole path with only GitHub faked: download, hash, swap, restart."""
+    import hashlib
+    import update
+    from gui import actions
+
+    body = b"a genuinely new build" * 50
+    running = tmp_path / "Leadsmith.exe"
+    running.write_bytes(b"the old build")
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", str(running))
+
+    release = a_release("0.9.9")
+    release.asset_size = len(body)
+    release.digest = "sha256:" + hashlib.sha256(body).hexdigest()
+
+    class Chunked:
+        ok, status_code, headers = True, 200, {}
+        def iter_content(self, chunk_size=1):
+            yield body
+
+    monkeypatch.setattr(update.requests, "get", lambda *a, **kw: Chunked())
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+    monkeypatch.setattr(window, "close", lambda: None)
+
+    captured = {}
+    monkeypatch.setattr(window, "run_job",
+                        lambda job, **kw: captured.update(job=job, kw=kw) or True)
+    window.show_update(release)
+    window._update_action()
+
+    job, on_done = captured["job"], captured["kw"]["on_done"]
+    outcome = {}
+    job.signals.finished.connect(lambda r: outcome.update(path=r))
+    job.signals.failed.connect(lambda m, d: outcome.update(failed=d or m))
+    runner = Runner()
+    assert runner.start(job, on_done=on_done) is True
+    assert runner.wait(20000)
+    app.processEvents()
+
+    assert "failed" not in outcome, outcome.get("failed")
+    assert running.read_bytes() == body, "the new build is not in place"
+    assert (tmp_path / "Leadsmith.exe.old").read_bytes() == b"the old build"
+    assert not window.update_banner.isVisibleTo(window), "the bar outlived the update"
+
+
+def test_a_tampered_download_leaves_the_working_build_alone(window, app,
+                                                            monkeypatch, tmp_path):
+    import update
+    from gui import actions
+
+    running = tmp_path / "Leadsmith.exe"
+    running.write_bytes(b"the old build")
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", str(running))
+
+    release = a_release("0.9.9")
+    release.asset_size = 11
+    release.digest = "sha256:" + "00" * 32          # will not match anything
+
+    class Chunked:
+        ok, status_code, headers = True, 200, {}
+        def iter_content(self, chunk_size=1):
+            yield b"not the one"
+
+    monkeypatch.setattr(update.requests, "get", lambda *a, **kw: Chunked())
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    captured = {}
+    monkeypatch.setattr(window, "run_job",
+                        lambda job, **kw: captured.update(job=job) or True)
+    actions.install_update(window, release)
+
+    job = captured["job"]
+    failed = {}
+    job.signals.failed.connect(lambda m, d: failed.update(message=m))
+    runner = Runner()
+    runner.start(job)
+    assert runner.wait(20000)
+    app.processEvents()
+
+    assert "checksum" in failed.get("message", "")
+    assert running.read_bytes() == b"the old build"
+    assert not (tmp_path / "Leadsmith.exe.old").exists()
+
+
+def test_settings_says_which_version_this_is(window, app):
+    import update
+    settings = window.pages[5]
+    window.go(5)
+    app.processEvents()
+    assert update.VERSION in settings.version_note.text()
 
 
 # ---------------------------------------------------------------------------
