@@ -287,6 +287,49 @@ def test_the_spec_ships_the_templates_the_app_reads_at_runtime():
     assert "console=False" in spec, "a GUI build must not flash a terminal"
 
 
+def workflow() -> str:
+    return open(".github/workflows/windows-app.yml", encoding="utf-8").read()
+
+
+def windows_job() -> str:
+    job = workflow().split("\n  build:", 1)
+    assert len(job) == 2, "the Windows job is no longer called `build`"
+    return job[1]
+
+
+def test_the_windows_job_installs_the_things_it_then_runs():
+    """A run failed here for a whole day: the job pip-installed PySide6 and
+    PyInstaller by name, then ran `python -m pytest`, which was never installed.
+    It died in one second, and because the build step needs it, every step after
+    — including the one that uploads the .exe — was skipped. The symptom was an
+    absent artifact rather than an error anyone would look at.
+
+    Naming the extras instead of restating their contents is what keeps the two
+    from drifting apart again.
+    """
+    job = windows_job()
+    assert "python -m pytest" in job
+    assert '".[dev,build]"' in job, "install the declared extras, not a copy of them"
+
+    import tomllib
+    extras = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]
+    assert any(d.startswith("pytest") for d in extras["dev"])
+    assert any(d.startswith("pyinstaller") for d in extras["build"])
+    assert any(d.startswith("PySide6") for d in extras["build"])
+
+
+def test_the_exe_launch_check_actually_waits_for_the_exe():
+    """`console=False` makes this a GUI-subsystem binary, and PowerShell does
+    not block on one — it returns as soon as the process is spawned. Calling the
+    exe directly would therefore pass while the app crashed on launch, which is
+    the single thing this step exists to catch.
+    """
+    job = windows_job()
+    launch = job.split("Check it starts", 1)[1].split("Report size", 1)[0]
+    assert "Start-Process" in launch and "WaitForExit" in launch
+    assert "ExitCode" in launch, "a non-zero exit has to fail the job"
+
+
 # ---------------------------------------------------------------------------
 # Choosing who writes the copy
 # ---------------------------------------------------------------------------
