@@ -11,4 +11,4 @@ one-file build unpacks to a temp directory anyway. A Python module travels.
 """
 from __future__ import annotations
 
-VERSION = "0.2.5"
+VERSION = "0.2.6"
