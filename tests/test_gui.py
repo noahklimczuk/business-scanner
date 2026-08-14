@@ -430,16 +430,33 @@ def test_a_plain_function_is_left_alone(app):
 
 
 def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
-    """The end-to-end shape of the bug: press the button, run the job."""
+    """Press the button, then run the job on a real worker thread.
+
+    Two things this has to do that an easier version of it does not. It runs
+    through the Runner rather than calling `job.run()` inline, because the bug
+    class here is cross-thread use and running on the calling thread cannot
+    reproduce it. And the stubs touch the database with the connection they are
+    handed, because a scan that never queries anything proves nothing about
+    which connection it would have used.
+    """
     import prospect
     from gui import actions
 
     monkeypatch.setattr(config := __import__("config"), "api_key", lambda cfg: "AIzaTest")
-    monkeypatch.setattr(prospect, "geocode",
-                        lambda *a, **k: (44.05, -79.46, "Newmarket, ON"))
-    monkeypatch.setattr(prospect, "run", lambda *a, **k: SimpleNamespace(
-        seen=12, new_leads=5, calls_made=8, calls_failed=0, actual_cost=0.32))
     monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    def fake_geocode(key, town, region, con):
+        db.geocode_cached(con, town)          # the call in the real traceback
+        return 44.05, -79.46, "Newmarket, ON"
+
+    def fake_run(key, con, plan, progress):
+        con.execute("SELECT count(*) FROM leads").fetchone()
+        progress(1, 1)
+        return SimpleNamespace(seen=12, new_leads=5, calls_made=8,
+                               calls_failed=0, actual_cost=0.32)
+
+    monkeypatch.setattr(prospect, "geocode", fake_geocode)
+    monkeypatch.setattr(prospect, "run", fake_run)
 
     captured = {}
     monkeypatch.setattr(window, "run_job",
@@ -450,7 +467,11 @@ def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
     job = captured["job"]
     failed = {}
     job.signals.failed.connect(lambda m, d: failed.update(message=m, detail=d))
-    job.run()
+
+    runner = Runner()
+    assert runner.start(job) is True
+    assert runner.wait(20000), "the scan job never finished"
+    app.processEvents()
     assert not failed, failed.get("message")
 
 
