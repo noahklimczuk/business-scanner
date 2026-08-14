@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import webbrowser
+from contextlib import contextmanager
 from typing import Any, Optional
 
 import billing
@@ -32,6 +33,27 @@ from gui.work import Job
 # real figure is recorded per generation and shown on the Money page; this is
 # only ever used to decide whether to stop and ask.
 COPY_ESTIMATE_USD = 0.03
+
+
+@contextmanager
+def worker_db():
+    """A database connection belonging to the thread that will use it.
+
+    SQLite refuses a connection across threads, and the window's `con` is made
+    on the UI thread. Every `work()` below runs on a worker, so it opens its
+    own and closes it on the way out — including when the work raises, or a
+    failed scan would leak a handle per attempt.
+
+    A shared connection with `check_same_thread=False` would be fewer lines and
+    the wrong trade: the UI thread reads from `window.con` to refresh pages
+    while a job is mid-transaction, and the two would interleave on one
+    connection. Separate connections to one file is what SQLite is good at.
+    """
+    con = db.connect()
+    try:
+        yield con
+    finally:
+        con.close()
 
 
 def copywriter(window) -> dict[str, Any]:
@@ -110,23 +132,24 @@ def scan(window, town: str, radius_km: float, cell_m: int, *,
         return
 
     def work(job: Job):
-        # `geocode` does its own 30-day caching when handed the connection, so
-        # re-scanning the same town this week costs nothing extra.
-        job.report(0, 0, f"Finding {town}…")
-        region = window.cfg.get("defaults", {}).get("region_code", "CA")
-        lat, lng, label = prospect.geocode(key, town, region, con)
-        con.commit()
+        with worker_db() as wcon:
+            # `geocode` does its own 30-day caching when handed the connection,
+            # so re-scanning the same town this week costs nothing extra.
+            job.report(0, 0, f"Finding {town}…")
+            region = window.cfg.get("defaults", {}).get("region_code", "CA")
+            lat, lng, label = prospect.geocode(key, town, region, wcon)
+            wcon.commit()
 
-        plan = prospect.plan(lat, lng, radius_km, cell_m, label=label)
-        job.report(0, plan.calls, f"Searching {label}…")
+            plan = prospect.plan(lat, lng, radius_km, cell_m, label=label)
+            job.report(0, plan.calls, f"Searching {label}…")
 
-        def progress(done: int, total: int) -> bool:
-            return job.report(done, total,
-                              f"Searching {label} — {done} of {total}")
+            def progress(done: int, total: int) -> bool:
+                return job.report(done, total,
+                                  f"Searching {label} — {done} of {total}")
 
-        result = prospect.run(key, con, plan, progress)
-        con.commit()
-        return plan, result
+            result = prospect.run(key, wcon, plan, progress)
+            wcon.commit()
+            return plan, result
 
     def done(payload):
         plan, result = payload
@@ -207,13 +230,14 @@ def build_site(window, lead: dict[str, Any], *, launch: bool = False) -> None:
                 "verified_facts": verified,
                 "copy": content,
             })
-            db.record_generation(
-                con, place_id, model=generate.MODEL, template=template,
-                attempts=usage.attempts, input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_write_tokens=usage.cache_write_tokens,
-                cache_read_tokens=usage.cache_read_tokens, cost=usage.cost)
-            con.commit()
+            with worker_db() as wcon:
+                db.record_generation(
+                    wcon, place_id, model=generate.MODEL, template=template,
+                    attempts=usage.attempts, input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cache_write_tokens=usage.cache_write_tokens,
+                    cache_read_tokens=usage.cache_read_tokens, cost=usage.cost)
+                wcon.commit()
 
         job.report(0, 0, "Rendering the page…")
         site = generate.render(
@@ -221,8 +245,9 @@ def build_site(window, lead: dict[str, Any], *, launch: bool = False) -> None:
             template=template, preview=not launch, operator=cfg.get("business", {}),
             city_hint=city)
         paths = generate.write_site(place_id, site)
-        db.set_site_dir(con, place_id, generate.site_dir(place_id))
-        con.commit()
+        with worker_db() as wcon:
+            db.set_site_dir(wcon, place_id, generate.site_dir(place_id))
+            wcon.commit()
         return paths["index.html"]
 
     def done(path):
@@ -271,8 +296,9 @@ def preview_site(window, lead: dict[str, Any]) -> None:
         job.report(0, 0, "Uploading to Cloudflare…")
         project = deploy.project_for(None)
         result = deploy.deploy(site_dir, project)
-        db.set_preview(window.con, lead["place_id"], result.url, result.project)
-        window.con.commit()
+        with worker_db() as wcon:
+            db.set_preview(wcon, lead["place_id"], result.url, result.project)
+            wcon.commit()
         return result
 
     def done(result):
@@ -345,8 +371,9 @@ def sync_billing(window, on_done=None) -> None:
 
     def work(job: Job):
         job.report(0, 0, "Asking Stripe…")
-        result = billing.sync(window.con, key)
-        window.con.commit()
+        with worker_db() as wcon:
+            result = billing.sync(wcon, key)
+            wcon.commit()
         return result
 
     window.run_job(Job(work), status="Checking Stripe…", on_done=on_done)
