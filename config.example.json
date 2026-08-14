@@ -2,6 +2,9 @@
   "google_api_key": "PASTE_YOUR_PLACES_API_KEY_HERE",
   "anthropic_api_key": "PASTE_YOUR_ANTHROPIC_API_KEY_HERE",
 
+  "//stripe": "Read-only is enough: nothing here writes to Stripe, it reconciles what Stripe says against what we think.",
+  "stripe_secret_key": "",
+
   "business": {
     "operator_name": "Your Name",
     "legal_name": "Your Name o/a Leadsmith",

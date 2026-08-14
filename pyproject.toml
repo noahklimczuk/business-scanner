@@ -28,8 +28,9 @@ leadsmith = "cli:app"
 
 [tool.setuptools]
 include-package-data = true
-py-modules = ["cli", "config", "db", "deploy", "design", "enrich", "generate",
-              "hours", "pitch", "prospect", "qr", "search", "visuals"]
+py-modules = ["billing", "board", "cli", "config", "db", "deploy", "design",
+              "enrich", "generate", "hours", "offboard", "pitch", "prospect",
+              "qr", "search", "visuals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -161,6 +161,27 @@ CREATE TABLE IF NOT EXISTS generations (
     cost               REAL
 );
 
+-- Phase 6. What each client actually pays, so the board can answer "what is
+-- this worth" without opening Stripe. Stripe stays the source of truth for
+-- money; this is the local mirror of it, and `billing sync` reconciles the
+-- two rather than either one guessing.
+CREATE TABLE IF NOT EXISTS subscriptions (
+    place_id        TEXT PRIMARY KEY,
+    plan            TEXT,
+    setup_fee       REAL DEFAULT 0,
+    monthly         REAL DEFAULT 0,
+    currency        TEXT DEFAULT 'CAD',
+    started_at      TEXT,
+    term_months     INTEGER DEFAULT 12,
+    status          TEXT DEFAULT 'active',
+    stripe_id       TEXT,
+    stripe_status   TEXT,
+    synced_at       TEXT,
+    cancelled_at    TEXT,
+    note            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sub_status ON subscriptions(status);
+
 -- Geocoding a town costs a call. Same 30-day expiry as everything else from
 -- Google, so re-scanning "Newmarket, ON" this week is free.
 CREATE TABLE IF NOT EXISTS geocache (
@@ -197,6 +218,7 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("preview_project", "TEXT"),
     ],
     "market": [],
+    "subscriptions": [],
     "scans": [],
 }
 
@@ -217,6 +239,16 @@ def _migrate(con: sqlite3.Connection) -> None:
         for name, decl in columns:
             if name not in have:
                 con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
+def has_column(con: sqlite3.Connection, table: str, column: str) -> bool:
+    """Whether a column exists yet.
+
+    The phases land in whatever order the operator merges them, and the board
+    should show what it can rather than crash on a column a later phase adds.
+    """
+    return any(r["name"] == column
+               for r in con.execute(f"PRAGMA table_info({table})"))
 
 
 def now() -> str:
@@ -685,3 +717,64 @@ def purge_stale(con: sqlite3.Connection, days: int = CACHE_TTL_DAYS) -> int:
 def counts_by_stage(con: sqlite3.Connection) -> dict[str, int]:
     rows = con.execute("SELECT stage, COUNT(*) AS n FROM leads GROUP BY stage").fetchall()
     return {r["stage"]: r["n"] for r in rows}
+
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — what the clients are worth
+# ---------------------------------------------------------------------------
+SUB_STATUS = ["active", "paused", "cancelled"]
+
+
+def set_subscription(con: sqlite3.Connection, place_id: str, *, plan: str,
+                     monthly: float, setup_fee: float = 0.0,
+                     term_months: int = 12, currency: str = "CAD",
+                     stripe_id: str = "", started_at: Optional[str] = None,
+                     note: str = "") -> None:
+    con.execute(
+        """INSERT INTO subscriptions
+           (place_id, plan, setup_fee, monthly, currency, started_at,
+            term_months, status, stripe_id, note)
+           VALUES (?,?,?,?,?,?,?,'active',?,?)
+           ON CONFLICT(place_id) DO UPDATE SET
+             plan=excluded.plan, setup_fee=excluded.setup_fee,
+             monthly=excluded.monthly, currency=excluded.currency,
+             term_months=excluded.term_months, stripe_id=excluded.stripe_id,
+             note=excluded.note, status='active', cancelled_at=NULL""",
+        (place_id, plan, setup_fee, monthly, currency,
+         started_at or now(), term_months, stripe_id or None, note or None))
+
+
+def end_subscription(con: sqlite3.Connection, place_id: str,
+                     status: str = "cancelled", note: str = "") -> None:
+    if status not in SUB_STATUS:
+        raise ValueError(f"Unknown status: {status}. Use one of {', '.join(SUB_STATUS)}")
+    con.execute(
+        "UPDATE subscriptions SET status=?, cancelled_at=?, note=COALESCE(?, note) "
+        "WHERE place_id=?",
+        (status, now() if status == "cancelled" else None, note or None, place_id))
+
+
+def subscriptions(con: sqlite3.Connection, status: Optional[str] = None
+                  ) -> list[sqlite3.Row]:
+    q = ("SELECT s.*, l.name, l.domain FROM subscriptions s "
+         "LEFT JOIN leads l ON l.place_id = s.place_id") \
+        if has_column(con, "leads", "domain") else \
+        ("SELECT s.*, l.name, NULL AS domain FROM subscriptions s "
+         "LEFT JOIN leads l ON l.place_id = s.place_id")
+    args: list[Any] = []
+    if status:
+        q += " WHERE s.status = ?"
+        args.append(status)
+    return con.execute(q + " ORDER BY s.monthly DESC, l.name", args).fetchall()
+
+
+def subscription(con: sqlite3.Connection, place_id: str) -> Optional[sqlite3.Row]:
+    return con.execute("SELECT * FROM subscriptions WHERE place_id=?",
+                       (place_id,)).fetchone()
+
+
+def record_sync(con: sqlite3.Connection, place_id: str, stripe_status: str) -> None:
+    con.execute(
+        "UPDATE subscriptions SET stripe_status=?, synced_at=? WHERE place_id=?",
+        (stripe_status or None, now(), place_id))

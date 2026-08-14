@@ -11,11 +11,14 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+import billing as billing_mod
+import board as board_mod
 import config
 import db
 import deploy
 import enrich as enrich_mod
 import generate as generate_mod
+import offboard
 import pitch
 import prospect
 import qr as qr_mod
@@ -819,6 +822,173 @@ def touch(
                       f"automatically.[/dim]")
     elif after == "interested":
         console.print(f"[dim]  leave-behind: leadsmith leavebehind {place_id}[/dim]")
+    con.close()
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — operations
+# ---------------------------------------------------------------------------
+@app.command()
+def board(
+    out: Optional[str] = typer.Option(None, "--out", help="Where to write it."),
+    open_after: bool = typer.Option(False, "--open", help="Open it in a browser."),
+) -> None:
+    """Write the local dashboard: call list, pipeline, live sites, money.
+
+    A file, not a server. Nothing to leave running and nothing reachable from
+    outside this laptop — which matters, because this page has every client's
+    revenue on it.
+    """
+    con = db.connect()
+    cfg = config.load()
+    path = board_mod.write(board_mod.build(con, operator=cfg.get("business", {})),
+                           out or board_mod.DEFAULT_PATH)
+
+    calls = board_mod.call_list(con)
+    money = billing_mod.summarise(db.subscriptions(con))
+    down = [s for s in board_mod.live_sites(con) if s.get("last_check_ok") == 0]
+
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("board", path)
+    t.add_row("call today", f"{len(calls)} lead(s)")
+    t.add_row("clients", f"{money.clients} · ${money.mrr:,.0f}/mo {money.currency}")
+    if down:
+        t.add_row("down", f"[red]{len(down)} live site(s) failed their last check[/red]")
+    console.print(Panel(t, title="board", border_style="green", expand=False))
+
+    if calls:
+        console.print("\n  next up:")
+        for lead in calls[:5]:
+            why = lead["why"][0] if lead["why"] else ""
+            console.print(f"    [bold]{lead['name']}[/bold]  "
+                          f"{lead['phone'] or 'no phone'}  [dim]{why}[/dim]")
+    if open_after:
+        import webbrowser
+        webbrowser.open("file://" + os.path.abspath(path))
+    con.close()
+
+
+@app.command()
+def bill(
+    place_id: str,
+    plan: str = typer.Argument(..., help=f"One of: {', '.join(billing_mod.PLANS)}"),
+    monthly: Optional[float] = typer.Option(None, help="Override the plan's monthly."),
+    setup: Optional[float] = typer.Option(None, help="Override the plan's setup fee."),
+    stripe_id: str = typer.Option("", "--stripe-id",
+                                  help="The sub_... id, so `billing --sync` can "
+                                       "check it is still being paid."),
+    note: str = typer.Option("", "--note"),
+) -> None:
+    """Record what a client pays. Stripe collects it; this remembers it."""
+    con = db.connect()
+    lead = _lead_for(con, place_id)
+    try:
+        terms = billing_mod.plan_terms(plan)
+    except billing_mod.BillingError as exc:
+        _fail(str(exc))
+        return
+
+    db.set_subscription(
+        con, place_id, plan=plan,
+        monthly=monthly if monthly is not None else terms["monthly"],
+        setup_fee=setup if setup is not None else terms["setup_fee"],
+        term_months=terms["term_months"], stripe_id=stripe_id, note=note)
+    # Someone who is paying is not a prospect. Without this they stay in the
+    # call list and get rung as a lead, which is the single most embarrassing
+    # thing this tool could do to its operator.
+    if lead["stage"] not in ("sold", "live"):
+        db.set_stage(con, place_id, "sold")
+    con.commit()
+
+    money = billing_mod.summarise(db.subscriptions(con))
+    console.print(f"[green]{lead['name']}[/green] on {plan} — "
+                  f"${monthly if monthly is not None else terms['monthly']:,.0f}/mo")
+    console.print(f"[dim]  {money.clients} clients, ${money.mrr:,.0f}/mo total[/dim]")
+    if not stripe_id:
+        console.print("[dim]  no Stripe id — `billing --sync` cannot check this "
+                      "one is actually being paid.[/dim]")
+    con.close()
+
+
+@app.command()
+def billing(
+    sync: bool = typer.Option(False, "--sync",
+                              help="Ask Stripe whether we are still being paid."),
+) -> None:
+    """What the clients are worth, and whether Stripe agrees."""
+    con = db.connect()
+    cfg = config.load()
+    rows = db.subscriptions(con)
+    money = billing_mod.summarise(rows)
+    costs = billing_mod.unit_costs(con)
+
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("MRR", f"[bold]${money.mrr:,.2f}[/bold] {money.currency} "
+                     f"[dim]· ${money.arr:,.0f}/yr[/dim]")
+    t.add_row("clients", f"{money.clients} active, {money.paused} paused, "
+                         f"{money.cancelled} cancelled")
+    t.add_row("average", f"${money.average:,.2f} each")
+    t.add_row("API cost", f"${costs['places'] + costs['generation']:,.2f} in "
+                          f"30 days [dim](places ${costs['places']:,.2f}, "
+                          f"copy ${costs['generation']:,.2f})[/dim]")
+    console.print(Panel(t, title="billing", border_style="green", expand=False))
+
+    if not sync:
+        con.close()
+        return
+
+    try:
+        result = billing_mod.sync(con, cfg.get("stripe_secret_key", ""))
+    except billing_mod.BillingError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+
+    console.print(f"\n  checked {result.checked} against Stripe · "
+                  f"{result.matched} agree")
+    for problem in result.problems:
+        console.print(f"  [red]![/red] [bold]{problem.name}[/bold]: "
+                      f"we say {problem.ours}, Stripe says {problem.theirs}")
+        console.print(f"      [dim]{problem.detail}[/dim]")
+    if result.unlinked:
+        console.print(f"  [dim]{len(result.unlinked)} not linked to Stripe: "
+                      f"{', '.join(result.unlinked[:5])}[/dim]")
+    if not result.problems:
+        console.print("  [green]Stripe agrees with all of it.[/green]")
+    con.close()
+
+
+@app.command()
+def export(
+    place_id: str,
+    out: str = typer.Option(".", "--out", help="Directory or filename for the zip."),
+) -> None:
+    """Everything a leaving client is owed, in one zip.
+
+    The leave-behind promises this in print — "the domain is transferred to you
+    and you get a copy of every file, no exit fee, no hostage" — to someone who
+    has probably been burned by an agency before. It is one command because the
+    day it gets called is the day nobody feels like doing it.
+    """
+    con = db.connect()
+    lead = _lead_for(con, place_id)
+    cfg = config.load()
+    try:
+        path = offboard.write(lead, out, operator=cfg.get("business", {}))
+    except OSError as exc:
+        _fail(f"Could not write the zip: {exc}")
+        return
+
+    size = os.path.getsize(path)
+    console.print(f"[green]{lead['name']}[/green] → [bold]{path}[/bold] "
+                  f"[dim]{size / 1024:.1f} KB[/dim]")
+    console.print("[dim]  Contains the site, their words, and a plain-English "
+                  "sheet for whoever they hire next.[/dim]")
+    console.print("[dim]  Not included: our pricing, or the rejected-copy log.[/dim]")
     con.close()
 
 

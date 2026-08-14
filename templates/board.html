@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leadsmith board</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+/* Deliberately not the client-site design system. This page is a tool, read on
+   a laptop by one person who already knows what everything means, and it wants
+   density where those want air. It shares the typeface and nothing else.
+
+   Dark by default because it gets left open in a second window all day. */
+:root {
+  --bg: #16161a; --panel: #1e1e24; --edge: #2c2c34;
+  --ink: #f2f2f4; --muted: #9a9aa4;
+  --good: #4ade80; --warn: #fbbf24; --bad: #f87171; --accent: #7dd3fc;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+          system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f6f6f8; --panel: #fff; --edge: #e3e3e8;
+          --ink: #1a1a1e; --muted: #66666e;
+          --good: #16803c; --warn: #92620a; --bad: #b3261e; --accent: #0369a1; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 1.5rem; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: 14px; line-height: 1.45;
+}
+h1 { font-size: 1.3rem; margin: 0; letter-spacing: -.02em; }
+h2 { font-size: .78rem; margin: 0 0 .9rem; text-transform: uppercase;
+     letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+a { color: var(--accent); }
+.head { display: flex; justify-content: space-between; align-items: baseline;
+        gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.stamp { color: var(--muted); font-size: .82rem; }
+
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.panel { background: var(--panel); border: 1px solid var(--edge);
+         border-radius: 12px; padding: 1.1rem 1.2rem; }
+.wide { grid-column: 1 / -1; }
+
+/* money */
+.figures { display: flex; flex-wrap: wrap; gap: 1.75rem; }
+.figure-value { font-size: 1.75rem; font-weight: 650; letter-spacing: -.03em;
+                font-variant-numeric: tabular-nums; }
+.figure-label { color: var(--muted); font-size: .78rem; text-transform: uppercase;
+                letter-spacing: .06em; }
+.good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: .72rem; text-transform: uppercase;
+     letter-spacing: .06em; color: var(--muted); font-weight: 600;
+     padding: 0 .6rem .45rem 0; }
+td { padding: .5rem .6rem .5rem 0; border-top: 1px solid var(--edge);
+     vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.name { font-weight: 600; }
+.sub { color: var(--muted); font-size: .82rem; }
+.why { color: var(--muted); font-size: .82rem; margin-top: .15rem; }
+.why span::after { content: " · "; }
+.why span:last-child::after { content: ""; }
+.pid { font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+
+/* pipeline */
+.bars { display: grid; gap: .4rem; }
+.bar { display: grid; grid-template-columns: 5.5rem 1fr 2.5rem; align-items: center; gap: .6rem; }
+.bar-track { background: var(--edge); border-radius: 4px; height: .55rem; overflow: hidden; }
+.bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
+.bar-count { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+.empty { color: var(--muted); font-style: italic; }
+.dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%;
+       margin-right: .4rem; }
+.note { color: var(--muted); font-size: .8rem; margin-top: .9rem; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>Leadsmith{% if operator.operator_name %} · {{ operator.operator_name }}{% endif %}</h1>
+  <span class="stamp">{{ generated }}</span>
+</div>
+
+<div class="grid">
+
+  {# --------------------------------------------------------------- money #}
+  <section class="panel wide">
+    <h2>Money</h2>
+    <div class="figures">
+      <div>
+        <div class="figure-value">${{ "{:,.0f}".format(money.mrr) }}</div>
+        <div class="figure-label">MRR · {{ money.currency }}</div>
+      </div>
+      <div>
+        <div class="figure-value">${{ "{:,.0f}".format(money.arr) }}</div>
+        <div class="figure-label">Annualised</div>
+      </div>
+      <div>
+        <div class="figure-value">{{ money.clients }}</div>
+        <div class="figure-label">Paying clients</div>
+      </div>
+      <div>
+        <div class="figure-value">${{ "{:,.0f}".format(money.average) }}</div>
+        <div class="figure-label">Average each</div>
+      </div>
+      <div>
+        {# Against MRR, because the guide's claim is a marginal cost of about a
+           dollar a client a month, and an unchecked number stops being true. #}
+        <div class="figure-value">${{ "{:,.2f}".format(costs.places + costs.generation) }}</div>
+        <div class="figure-label">API cost, 30 days</div>
+      </div>
+      <div>
+        <div class="figure-value {{ 'good' if margin > 0 else 'muted' }}">${{ "{:,.0f}".format(margin) }}</div>
+        <div class="figure-label">MRR less cost</div>
+      </div>
+    </div>
+    {% if money.cancelled or money.paused %}
+    <p class="note">
+      {{ money.cancelled }} cancelled, {{ money.paused }} paused.
+    </p>
+    {% endif %}
+  </section>
+
+  {# ---------------------------------------------------------- call list #}
+  <section class="panel wide">
+    <h2>Call today — {{ calls|length }} {% if calls %}(best first, nobody rung this week){% endif %}</h2>
+    {% if calls %}
+    <table>
+      <thead>
+        <tr><th>Business</th><th>Phone</th><th class="num">Score</th></tr>
+      </thead>
+      <tbody>
+        {% for lead in calls %}
+        <tr>
+          <td>
+            <div class="name">{{ lead.name }}</div>
+            <div class="why">
+              {% for reason in lead.why %}<span>{{ reason }}</span>{% endfor %}
+            </div>
+            <div class="pid">{{ lead.place_id }}</div>
+          </td>
+          <td>
+            {% if lead.phone %}{{ lead.phone }}{% else %}<span class="sub">—</span>{% endif %}
+            {% if lead.address %}<div class="sub">{{ lead.address }}</div>{% endif %}
+          </td>
+          <td class="num">{{ lead.score }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">
+      Sorted by score, which says who <em>qualifies</em>. Phase 2.5 replaces
+      that with propensity, which says who <em>buys</em> — a different and
+      better question.
+    </p>
+    {% else %}
+    <p class="empty">Nobody to call. Either everyone has been rung this week, or
+      the pipeline is empty — run a scan.</p>
+    {% endif %}
+  </section>
+
+  {# ----------------------------------------------------------- pipeline #}
+  <section class="panel">
+    <h2>Pipeline — {{ total_leads }} leads</h2>
+    <div class="bars">
+      {% set most = pipeline|map(attribute='count')|max %}
+      {% for band in pipeline %}
+      <div class="bar">
+        <span>{{ band.stage }}</span>
+        <span class="bar-track">
+          <span class="bar-fill" style="width: {{ (100 * band.count / most) if most else 0 }}%"></span>
+        </span>
+        <span class="bar-count">{{ band.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# -------------------------------------------------------- live sites #}
+  <section class="panel">
+    <h2>Live sites — {{ live|length }}</h2>
+    {% if live %}
+    <table>
+      <tbody>
+        {% for site in live %}
+        <tr>
+          <td>
+            <div class="name">{{ site.name }}</div>
+            {% if site.live_url %}
+            <div class="sub"><a href="{{ site.live_url }}">{{ site.domain or site.live_url }}</a></div>
+            {% endif %}
+          </td>
+          <td class="num">
+            {% if site.last_check_ok == 1 %}
+              <span class="good"><span class="dot" style="background:currentColor"></span>up</span>
+            {% elif site.last_check_ok == 0 %}
+              <span class="bad"><span class="dot" style="background:currentColor"></span>down</span>
+            {% else %}
+              <span class="sub">never checked</span>
+            {% endif %}
+            {% if site.checked_days is not none %}
+            <div class="sub">{{ site.checked_days }}d ago</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if down %}
+    <p class="note bad">{{ down|length }} site(s) failed their last check. Run
+      <code>leadsmith monitor</code>.</p>
+    {% elif unchecked %}
+    <p class="note warn">{{ unchecked|length }} site(s) not checked in the last
+      two days.</p>
+    {% endif %}
+    {% else %}
+    <p class="empty">No launched sites yet.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------------------------------------------- subscriptions #}
+  {% if subs %}
+  <section class="panel wide">
+    <h2>Subscriptions</h2>
+    <table>
+      <thead>
+        <tr><th>Client</th><th>Plan</th><th>Started</th>
+            <th class="num">Monthly</th><th>Stripe</th></tr>
+      </thead>
+      <tbody>
+        {% for sub in subs %}
+        <tr>
+          <td class="name">{{ sub.name or sub.place_id }}</td>
+          <td>{{ sub.plan }}</td>
+          <td class="sub">{{ (sub.started_at or '')[:10] }}</td>
+          <td class="num">${{ "{:,.0f}".format(sub.monthly or 0) }}</td>
+          <td>
+            {% if not sub.stripe_id %}
+              <span class="warn">not linked</span>
+            {% elif sub.stripe_status and sub.stripe_status != 'active' %}
+              <span class="bad">{{ sub.stripe_status }}</span>
+            {% elif sub.stripe_status %}
+              <span class="good">{{ sub.stripe_status }}</span>
+            {% else %}
+              <span class="sub">not synced</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">Stripe holds the money; this is our opinion about it.
+      <code>leadsmith billing --sync</code> reconciles the two.</p>
+  </section>
+  {% endif %}
+
+  {# ------------------------------------------------------ stale previews #}
+  {% if stale %}
+  <section class="panel wide">
+    <h2>Previews to take down — {{ stale|length }}</h2>
+    <table>
+      <tbody>
+        {% for lead in stale %}
+        <tr>
+          <td>
+            <div class="name">{{ lead.name }}</div>
+            <div class="sub">{{ lead.stage }} · published {{ (lead.preview_at or '')[:10] }}</div>
+          </td>
+          <td class="sub">{{ lead.preview_url }}</td>
+          <td class="num"><code>leadsmith unpreview {{ lead.place_id }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">Each one is a page with a stranger's name on it, published
+      by us, that nobody is going to buy.</p>
+  </section>
+  {% endif %}
+
+</div>
+</body>
+</html>
