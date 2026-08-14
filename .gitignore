@@ -9,6 +9,9 @@ leads.db-shm
 # Generated client sites (Phase 3+).
 sites/
 
+# The operator's dashboard (Phase 6). Every client's revenue is on it.
+board.html
+
 __pycache__/
 *.py[cod]
 .pytest_cache/
