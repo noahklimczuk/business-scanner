@@ -63,6 +63,11 @@ def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+    import startup
+    # The longest single step, and the one nothing else can report on: by the
+    # time this returns, Qt is loaded and the app can speak for itself.
+    startup.note("Loading…")
     from gui.app import main as run
     return run()
 

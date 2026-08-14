@@ -339,6 +339,8 @@ class Window(QMainWindow):
 
 
 def main() -> int:
+    import startup
+
     QApplication.setApplicationName(APP_NAME)
     QApplication.setOrganizationName("Leadsmith")
     app = QApplication(sys.argv)
@@ -346,9 +348,15 @@ def main() -> int:
 
     theme.apply(app, _system_is_dark(app))
 
+    startup.note("Opening your leads…")
     window = Window()
     window.resize(1240, 800)
     window.show()
+    # After show(), not before: closing on the line above would leave a blank
+    # rectangle in the gap while Qt paints the first frame, which looks worse
+    # than the splash it replaced.
+    app.processEvents()
+    startup.done()
     return app.exec()
 
 

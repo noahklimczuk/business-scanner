@@ -452,3 +452,63 @@ def test_pressing_scan_runs_the_scan(window, app, monkeypatch):
     job.signals.failed.connect(lambda m, d: failed.update(message=m, detail=d))
     job.run()
     assert not failed, failed.get("message")
+
+
+# ---------------------------------------------------------------------------
+# The splash screen
+#
+# Startup is dominated by things no Qt code can cover: unpacking the one-file
+# build, then importing PySide6. The splash therefore comes from PyInstaller's
+# bootloader, and the only jobs left to us are taking it down at the right
+# moment and never letting it break the app.
+# ---------------------------------------------------------------------------
+def test_the_splash_helpers_do_nothing_at_all_from_source():
+    """No pyi_splash outside a frozen build — these must be quiet no-ops."""
+    import startup
+    assert startup._splash() is None
+    startup.note("anything")       # must not raise
+    startup.done()
+    startup.done()                 # and must be safe twice
+
+
+def test_a_broken_splash_cannot_take_the_app_down(monkeypatch):
+    """Cosmetic failure stays cosmetic."""
+    import startup
+
+    class Exploding:
+        def is_alive(self): return True
+        def update_text(self, _): raise ConnectionError("splash died")
+        def close(self): raise ConnectionError("splash died")
+
+    monkeypatch.setattr(startup, "_splash", lambda: Exploding())
+    startup.note("still fine")
+    startup.done()
+
+
+def test_the_window_takes_the_splash_down_once_it_is_up():
+    """Ordering is the whole point: closing before show() leaves a blank gap,
+    and never closing leaves a loading box over a working app."""
+    import inspect
+    from gui import app as gui_app
+
+    src = inspect.getsource(gui_app.main)
+    assert "startup.done()" in src, "the splash is never closed"
+    assert src.index("window.show()") < src.index("startup.done()"), \
+        "the splash must come down after the window is painted, not before"
+
+
+def test_the_spec_ships_a_splash():
+    spec = open("build/leadsmith.spec", encoding="utf-8").read()
+    assert "Splash(" in spec
+    # Both halves are required for a one-file build; the binaries carry Tcl/Tk.
+    assert "splash," in spec and "splash.binaries," in spec
+
+    import os
+    import struct
+    png = os.path.join("build", "splash.png")
+    assert os.path.exists(png), "the spec names an image that is not committed"
+    data = open(png, "rb").read()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
+    width, height = struct.unpack(">II", data[16:24])
+    # PyInstaller downscales anything larger, which would blur the wordmark.
+    assert (width, height) <= (760, 480), f"{width}x{height} will be resized"
