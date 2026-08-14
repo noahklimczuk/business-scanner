@@ -440,3 +440,29 @@ def test_a_model_name_that_no_longer_exists_says_how_to_find_one(monkeypatch):
     with pytest.raises(generate.ContentError, match="Check lists the ones"):
         generate.write_copy(LEAD, provider={
             "provider": "gemini", "api_key": "k", "model": "gemini-1.0-ancient"})
+
+
+def test_an_anthropic_key_is_never_handed_to_another_service():
+    """The old top-level key is migrated onto Anthropic and nowhere else.
+
+    An earlier version attached it to whichever service was selected, so an
+    operator who chose a different one and left the key box empty had their
+    Anthropic key sent to that service's address. A wrong API call is an
+    annoyance; posting someone's key to a third party is not.
+    """
+    for provider in ("custom", "gemini", "groq"):
+        spec = generate.provider_from_config({
+            "copy": {"provider": provider, "api_key": ""},
+            "anthropic_api_key": "sk-ant-secret",
+        })
+        assert spec["provider"] == provider
+        assert spec["api_key"] != "sk-ant-secret", provider
+        assert not spec["api_key"], provider
+
+
+def test_the_old_key_still_works_when_anthropic_is_the_one_chosen():
+    for copy in ({}, {"provider": "anthropic", "api_key": ""}):
+        spec = generate.provider_from_config(
+            {"copy": copy, "anthropic_api_key": "sk-ant-secret"})
+        assert spec["provider"] == "anthropic"
+        assert spec["api_key"] == "sk-ant-secret"

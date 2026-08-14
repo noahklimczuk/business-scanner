@@ -375,3 +375,15 @@ def test_a_custom_service_needs_an_address_before_it_will_save(window, app):
     settings.copy_url.set_text("")
     settings.save()
     assert settings.copy_url.error.isVisibleTo(settings.copy_url)
+
+
+def test_a_custom_service_cannot_be_saved_without_an_address(window, app):
+    """Saving one produces a config that can only fail later, in the middle of
+    building a client's site."""
+    settings = window.pages[5]
+    settings.google.set_text("AIzaTest")
+    settings.provider.setCurrentIndex(settings.provider.findData("custom"))
+    settings.copy_key.set_text("")          # no key either — still not saveable
+    settings.copy_url.set_text("")
+    settings.save()
+    assert settings.copy_url.error.isVisibleTo(settings.copy_url)
