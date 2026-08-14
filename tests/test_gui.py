@@ -277,6 +277,10 @@ def test_the_frozen_build_keeps_its_data_beside_the_executable(monkeypatch, tmp_
 def test_the_spec_ships_the_templates_the_app_reads_at_runtime():
     spec = open("build/leadsmith.spec", encoding="utf-8").read()
     assert '"templates"' in spec
+    # PyInstaller raises on a data path that does not exist, so anything that
+    # only some branches have must be added conditionally. `functions/` arrives
+    # with Phase 5 and this spec has to build without it.
+    assert "os.path.isdir(_functions)" in spec
     # Imported by name, so PyInstaller's static analysis misses them.
     for module in ("segno", "phonenumbers", "anthropic"):
         assert module in spec

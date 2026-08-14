@@ -35,7 +35,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
       - name: Contact form tests
-        run: node --test functions/api/enquiry.test.mjs
+        # The Pages Function arrives with Phase 5, which is not merged. Until
+        # then there is nothing here to test, and a workflow that fails because
+        # an unmerged branch is unmerged teaches everyone to ignore red CI.
+        run: |
+          if [ -f functions/api/enquiry.test.mjs ]; then
+            node --test functions/api/enquiry.test.mjs
+          else
+            echo "functions/ not present on this branch — nothing to test."
+          fi
 
   build:
     needs: test

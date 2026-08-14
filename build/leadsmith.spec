@@ -16,12 +16,15 @@ import os
 
 ROOT = os.path.abspath(os.path.join(os.getcwd()))
 
-datas = [
-    # Jinja templates are read from disk at runtime, so they have to travel.
-    (os.path.join(ROOT, "templates"), "templates"),
-    # The Pages Function deployed alongside a launched site.
-    (os.path.join(ROOT, "functions"), "functions"),
-]
+# Jinja templates are read from disk at runtime, so they have to travel.
+datas = [(os.path.join(ROOT, "templates"), "templates")]
+
+# The Pages Function deployed alongside a launched site. It arrives with
+# Phase 5; PyInstaller raises on a data path that does not exist, so a spec
+# that names it unconditionally cannot build a checkout without it.
+_functions = os.path.join(ROOT, "functions")
+if os.path.isdir(_functions):
+    datas.append((_functions, "functions"))
 
 hiddenimports = [
     # Imported lazily or by name, so PyInstaller's static analysis misses them.
