@@ -54,8 +54,11 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: Install
+        # The dev extra, not a bare install: the smoke test below runs under
+        # pytest, and without it this job fails before it ever reaches the
+        # build — an exe that was never attempted, reported as a broken build.
         run: |
-          pip install -e .
+          pip install -e ".[dev]"
           pip install PySide6-Essentials pyinstaller
 
       - name: Smoke test the app offscreen
