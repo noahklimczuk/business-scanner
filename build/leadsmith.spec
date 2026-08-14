@@ -58,9 +58,29 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Shown by the bootloader, in C, before a line of our Python runs. That is the
+# only thing that can cover the wait: unpacking ~56MB to a temp directory and
+# then importing PySide6 accounts for most of the startup, and a Qt splash
+# cannot appear during the import of Qt itself. `startup.done()` takes it down
+# once the window is on screen.
+splash = Splash(
+    os.path.join(ROOT, "build", "splash.png"),
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=(40, 196),
+    text_size=9,
+    text_color="#9c9ca6",            # theme.DARK.muted
+    text_default="Starting…",
+    # A loading box that sits above every other window while someone works is
+    # a nuisance; it is already the thing they just double-clicked.
+    always_on_top=False,
+)
+
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
+    splash.binaries,
     a.binaries,
     a.datas,
     [],
