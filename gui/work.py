@@ -18,6 +18,7 @@ hold the design together:
 """
 from __future__ import annotations
 
+import inspect
 import traceback
 from typing import Any, Callable, Optional
 
@@ -60,10 +61,31 @@ class Job(QRunnable):
         self.signals.progress.emit(done, total, message)
         return not self._cancelled
 
+    def _inject(self) -> dict[str, Any]:
+        """Hand the job to work that asked for it.
+
+        Every action in the app is written `def work(job)` and started as
+        `Job(work)` — the job cannot be passed at construction time because it
+        does not exist yet. Without this the call raises TypeError the moment
+        the thread starts, which is what happened to Scan, Build site, Publish
+        and Check Stripe: all four were unreachable, and nothing caught it
+        because the tests built the pages without pressing the buttons.
+        """
+        kwargs = dict(self.kwargs)
+        try:
+            params = inspect.signature(self.fn).parameters
+        except (TypeError, ValueError):      # some builtins have no signature
+            return kwargs
+        if "job" in params and "job" not in kwargs:
+            kwargs["job"] = self
+        if "report" in params and "report" not in kwargs:
+            kwargs["report"] = self.report
+        return kwargs
+
     @Slot()
     def run(self) -> None:
         try:
-            result = self.fn(*self.args, **self.kwargs)
+            result = self.fn(*self.args, **self._inject())
         except Exception as exc:                                  # noqa: BLE001
             # The operator gets the sentence; the detail goes to the activity
             # log where it can be copied into a bug report.
