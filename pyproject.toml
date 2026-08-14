@@ -22,15 +22,23 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# The desktop app. Optional so a CLI-only checkout stays small — the GUI tests
+# skip themselves when it is absent.
+gui = ["PySide6-Essentials>=6.6"]
+build = ["PySide6-Essentials>=6.6", "pyinstaller>=6.3", "pillow>=10.0"]
 
 [project.scripts]
 leadsmith = "cli:app"
 
+[project.gui-scripts]
+leadsmith-app = "leadsmith_app:main"
+
 [tool.setuptools]
 include-package-data = true
 py-modules = ["billing", "board", "cli", "config", "db", "deploy", "design",
-              "enrich", "generate", "hours", "offboard", "pitch", "prospect",
-              "qr", "search", "visuals"]
+              "enrich", "generate", "hours", "leadsmith_app", "offboard",
+              "pitch", "prospect", "qr", "search", "visuals"]
+packages = ["gui", "gui.pages"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

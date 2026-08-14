@@ -1,0 +1,75 @@
+name: Windows app
+
+# Built here rather than on a developer machine because that is the only way
+# this repository can produce a Windows binary at all — PyInstaller does not
+# cross-compile, so a Linux or Mac checkout can write the app but never ship it.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]" PySide6-Essentials
+      - name: Tests
+        run: xvfb-run -a python -m pytest tests/ -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Contact form tests
+        run: node --test functions/api/enquiry.test.mjs
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Install
+        run: |
+          pip install -e .
+          pip install PySide6-Essentials pyinstaller
+
+      - name: Smoke test the app offscreen
+        run: python -m pytest tests/test_gui.py -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Build Leadsmith.exe
+        run: pyinstaller build/leadsmith.spec --noconfirm
+
+      - name: Check it starts
+        # A build that produces an exe which crashes on launch is worse than a
+        # failed build, because it looks like success. --selftest exits 0 after
+        # constructing the window without showing it.
+        run: |
+          dist\Leadsmith.exe --selftest
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Report size
+        run: |
+          $size = (Get-Item dist\Leadsmith.exe).Length / 1MB
+          Write-Host ("Leadsmith.exe is {0:N1} MB" -f $size)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Leadsmith-windows
+          path: dist/Leadsmith.exe
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Leadsmith.exe
