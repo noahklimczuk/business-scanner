@@ -701,6 +701,52 @@ def test_a_number_with_awkward_characters_still_makes_a_filename():
 
 
 # ---------------------------------------------------------------------------
+# Dates, on the platform this actually ships to
+# ---------------------------------------------------------------------------
+def test_dates_are_formatted_portably():
+    """`%-d` and `%-I` drop the leading zero — and only on glibc.
+
+    On Windows they raise `ValueError: Invalid format string`, and Windows is
+    the only platform the packaged app runs on. This is not a hypothetical: it
+    took out the invoice page, and it had already been sitting in the
+    leave-behind, the board and the offboarding note, where nothing on a Linux
+    runner would ever have hit it.
+    """
+    import ast
+    import glob
+
+    def bad(text) -> bool:
+        return isinstance(text, str) and any(
+            f"%-{letter}" in text for letter in "dImHjMSyU")
+
+    offenders = []
+    for path in glob.glob("*.py") + glob.glob("gui/**/*.py", recursive=True):
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), path)
+        for node in ast.walk(tree):
+            # x.strftime("%-d %B %Y")
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "strftime"
+                    and any(isinstance(a, ast.Constant) and bad(a.value)
+                            for a in node.args)):
+                offenders.append(f"{path}:{node.lineno}")
+            # f"{day:%-d %B %Y}", which goes the same way
+            if isinstance(node, ast.FormattedValue) and node.format_spec:
+                if any(isinstance(part, ast.Constant) and bad(part.value)
+                       for part in node.format_spec.values):
+                    offenders.append(f"{path}:{node.lineno}")
+
+    # Prose about the problem is fine — this reads the code, not the comments.
+    assert not offenders, f"glibc-only date directives: {', '.join(offenders)}"
+
+
+def test_the_long_date_reads_like_a_date():
+    assert invoice.long_date(datetime.date(2026, 8, 4)) == "4 August 2026"
+    assert invoice.long_date(datetime.date(2026, 12, 25)) == "25 December 2026"
+
+
+# ---------------------------------------------------------------------------
 # For the bookkeeper
 # ---------------------------------------------------------------------------
 def test_the_export_is_in_dollars_because_an_accountant_reads_it(con):

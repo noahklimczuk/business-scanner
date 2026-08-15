@@ -675,7 +675,7 @@ def document(con, number: str, *, operator: Optional[dict[str, Any]] = None,
             "address": (operator or {}).get("mailing_address", ""),
         },
         "footer": settings["footer"],
-        "printed": day.strftime("%-d %B %Y"),
+        "printed": long_date(day),
     }
 
 
@@ -685,11 +685,23 @@ def _tidy_quantity(quantity: Any) -> str:
     return str(int(value)) if value == int(value) else f"{value:g}"
 
 
+def long_date(day: datetime.date) -> str:
+    """"14 August 2026", on every platform this runs on.
+
+    Not `strftime("%-d %B %Y")`. The `%-d` that drops the leading zero is a
+    glibc extension: it works on Linux and a Mac and raises `ValueError:
+    Invalid format string` on Windows, which is the only platform this app
+    actually ships to. The day number is interpolated instead, and the parts
+    that are portable are left to strftime.
+    """
+    return f"{day.day} {day:%B %Y}"
+
+
 def _long_date(value: Optional[str]) -> str:
     if not value:
         return ""
     try:
-        return datetime.date.fromisoformat(str(value)[:10]).strftime("%-d %B %Y")
+        return long_date(datetime.date.fromisoformat(str(value)[:10]))
     except ValueError:
         return str(value)
 
