@@ -1,0 +1,116 @@
+{
+  "version": 2,
+  "template": "clinic",
+  "lead": {
+    "place_id": "demo-clinic-riverbend",
+    "name": "Riverbend Dental",
+    "category": "Dentist",
+    "address": "230 Yonge St S, Aurora, ON L4G 1M3, Canada",
+    "phone": "(905) 555-0129",
+    "phone_e164": "+19055550129",
+    "lat": 43.9946,
+    "lng": -79.4661,
+    "hours": [
+      "Monday: 8:00 AM – 5:00 PM",
+      "Tuesday: 8:00 AM – 7:00 PM",
+      "Wednesday: 8:00 AM – 5:00 PM",
+      "Thursday: 8:00 AM – 7:00 PM",
+      "Friday: 8:00 AM – 3:00 PM",
+      "Saturday: Closed",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Dental practice",
+    "hero_headline": "A dentist you can get an appointment with",
+    "hero_sub": "General and family dentistry on Yonge Street in Aurora.",
+    "about": [
+      "A general practice: check-ups, cleanings, fillings, crowns and the things that come up in between. Two evenings a week run late so an appointment does not have to cost a day off work.",
+      "Everything gets explained before it happens, with the picture on the screen in front of you. If a treatment can reasonably be watched rather than done, you will be told that too."
+    ],
+    "services_intro": "What a general practice looks after.",
+    "services": [
+      {
+        "name": "Check-ups and cleaning",
+        "description": "Examination, scaling and polishing, with x-rays when they are due."
+      },
+      {
+        "name": "Fillings",
+        "description": "Tooth-coloured restorations, matched and shaped to bite properly."
+      },
+      {
+        "name": "Crowns and bridges",
+        "description": "For teeth that have lost too much structure to fill."
+      },
+      {
+        "name": "Extractions",
+        "description": "Including wisdom teeth where they can be done here."
+      },
+      {
+        "name": "Children's dentistry",
+        "description": "First visits, sealants and appointments that are not frightening."
+      },
+      {
+        "name": "Emergency appointments",
+        "description": "Kept free each day for pain that cannot wait."
+      }
+    ],
+    "process_headline": "Your first appointment",
+    "process": [
+      {
+        "name": "Ring reception",
+        "description": "They will find a time and tell you what to bring."
+      },
+      {
+        "name": "Examination",
+        "description": "A full look, including x-rays if you are due for them."
+      },
+      {
+        "name": "A plan on the screen",
+        "description": "What needs doing, what can wait, and in what order."
+      },
+      {
+        "name": "Book what you agreed",
+        "description": "Nothing is scheduled that you have not said yes to."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Are you taking new patients?",
+        "a": "Ring reception and ask — it changes, and they will tell you honestly."
+      },
+      {
+        "q": "Do you have evening appointments?",
+        "a": "Tuesday and Thursday run until seven."
+      },
+      {
+        "q": "What if I am in pain today?",
+        "a": "Ring first thing. There is time kept free each day for exactly this."
+      },
+      {
+        "q": "Where do I park?",
+        "a": "There is parking behind the building, off the lane beside the entrance."
+      }
+    ],
+    "why_us": [
+      "Two late evenings a week",
+      "Emergency time kept free each day",
+      "Everything explained before it happens"
+    ],
+    "cta_line": "Ring reception and we will find you a time",
+    "closing_note": "Bring a list of anything you take — it takes two minutes and changes what we recommend.",
+    "meta_title": "Riverbend Dental — Dentist in Aurora",
+    "meta_description": "General and family dentistry with evening appointments on Yonge Street, Aurora.",
+    "service_areas": [
+      "Aurora",
+      "Newmarket",
+      "Oak Ridges",
+      "King City"
+    ],
+    "quote": {
+      "text": "Nobody has ever shown me the x-ray and explained it before. It took four minutes.",
+      "by": "Grant W., Aurora"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

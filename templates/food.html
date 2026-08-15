@@ -1,38 +1,21 @@
+{# The menu. Warm paper, a serif that knows what a wine list looks like, and
+   the food itself given the width of the page.
+
+   Image slots: 0 hero · 1 menu band · 2-5 gallery · 6 about · 7-9 why. #}
 {% extends "base.html" %}
-{% from "partials/hero.html" import art, hero_actions with context %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
 
-{% block hero %}
-<section class="hero">
-  <div class="shell centre hero-copy">
-    <p class="eyebrow rise-now">{{ lead.category or 'Local kitchen' }}{% if city %} · {{ city }}{% endif %}</p>
-    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
-    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
-    {{ hero_actions('Order by phone') }}
-  </div>
-  <div class="shell-wide">
-    {{ art(0) }}
-  </div>
-</section>
-{% endblock %}
-
-{% block services %}
-<section class="section" id="services" aria-labelledby="services-h">
-  <div class="shell centre">
-    <p class="eyebrow rise">On the menu</p>
-    <h2 class="headline rise" id="services-h">What we serve</h2>
-  </div>
-  <div class="shell-wide" style="margin-top:3rem">
-    {{ art(1) }}
-  </div>
-  <div class="shell">
-    <ul class="menu rise" role="list" style="margin-top:3.5rem">
-      {% for service in c.services %}
-      <li class="menu-row">
-        <h3 class="menu-name">{{ service.name }}</h3>
-        <p class="menu-copy">{{ service.description }}</p>
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
-</section>
+{% block sections %}
+{{ heroes.hero_editorial(fallback='Local kitchen', label='Order by phone —', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_menu(title='What we serve', eyebrow='On the menu', slot=1) }}
+{{ blocks.process_steps(heading='Ordering ahead', sunk=True) }}
+{{ blocks.gallery_rail(count=4, first=2, heading='The room', title='A look around') }}
+{{ blocks.about_split(night=True, flip=True, slot=6) }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.why_grid(art=True, first=7, heading='Why us') }}
+{{ blocks.faq_list() }}
+{{ blocks.contact_block(night=True, eyebrow='Find us') }}
 {% endblock %}

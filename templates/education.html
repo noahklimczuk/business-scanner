@@ -1,0 +1,29 @@
+{# The classroom. Blocky shapes, chunky rounded type, and programmes laid out
+   as tiles a parent can scan in one pass on a phone in a car park.
+
+   Image slots: 0 hero · 1-3 why · 4 about. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_block(fallback='Learning', label='Call', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_tiles(title='What we run', eyebrow='Programmes', sunk=True) }}
+{{ blocks.process_steps(heading='Getting started') }}
+{{ blocks.why_grid(art=True, first=1, heading='Why families choose us') }}
+{{ blocks.about_split(night=True, slot=4) }}
+{{ blocks.timetable(heading='The week', title='When we are open') }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Visit us', title='Where to find us') }}
+{% endblock %}
+
+{% block extra_css %}
+/* Blocks, not cards: the tiles alternate fills and the first one takes the
+   accent outright, which is what makes a grid read as a set of programmes. */
+.tile:first-child { background: var(--accent); border-color: var(--accent); }
+.tile:first-child .tile-name, .tile:first-child .tile-copy { color: var(--accent-fg); }
+{% endblock %}

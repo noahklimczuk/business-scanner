@@ -1,0 +1,336 @@
+{# The sections every template can draw on, in the order a page tends to use
+   them. A template picks and orders these; none of them assume what came
+   before.
+
+   Two rules hold across all of them, because the tests assert them across all
+   twelve templates:
+
+   - every <section> carries aria-labelledby pointing at its own heading, and
+     the id is unique on the page (1.3.1, 4.1.1);
+   - every run of things is a <ul role="list"> with <li> children, because
+     Safari drops list semantics from a list with no bullets and "6 services"
+     is information a screen reader should get before the first one. #}
+{% import "sections/media.html" as media with context %}
+
+
+{# ---------------------------------------------------------------- stats #}
+{# The one <dl> on the page. Pairs, marked up as pairs: the value is
+   meaningless without its label and a screen reader has no other way to know
+   they belong together. The value is read second because dt comes first; the
+   CSS reverses the two visually. #}
+{% macro stats_strip(night=False) %}
+{% if stats %}
+<section class="section-tight{{ ' on-night' if night else '' }}" aria-label="At a glance">
+  <dl class="shell stats rise">
+    {% for stat in stats %}
+    <div class="stat">
+      <dt class="stat-label">{{ stat.label }}</dt>
+      <dd class="stat-value">{{ stat.value }}</dd>
+    </div>
+    {% endfor %}
+  </dl>
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# ---------------------------------------------------------------- about #}
+{% macro about_split(night=True, flip=False, slot=2, eyebrow='About') %}
+<section class="section{{ ' on-night' if night else '' }}" id="about" aria-labelledby="about-h">
+  <div class="shell-wide split{{ ' split-flip' if flip else '' }}">
+    <div class="rise">
+      <p class="eyebrow">{{ eyebrow }}</p>
+      <h2 class="headline" id="about-h">{{ lead.name }}</h2>
+      {% for para in c.about %}
+      <p class="lede measure-wide" style="margin-top:1.3rem">{{ para }}</p>
+      {% endfor %}
+      {% if c.service_areas %}
+      <ul class="chips" role="list" style="margin-top:1.9rem">
+        {% for area in c.service_areas %}<li class="chip">{{ area }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if phone_href %}
+      <div class="actions">
+        <a class="btn btn-primary" href="tel:{{ phone_href }}">Call {{ phone_display }}</a>
+        {% if lead.address %}
+        <a class="chev" href="{{ map_url }}" rel="noopener">Get directions</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="rise">{{ media.art(slot, 'tall') }}</div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{% macro about_centre(night=True, eyebrow='About') %}
+<section class="section{{ ' on-night' if night else '' }}" id="about" aria-labelledby="about-h">
+  <div class="shell centre">
+    <p class="eyebrow rise">{{ eyebrow }}</p>
+    <h2 class="headline rise" id="about-h">{{ lead.name }}</h2>
+    <div class="rise">
+      {% for para in c.about %}
+      <p class="lede measure-wide" style="margin-top:1.4rem">{{ para }}</p>
+      {% endfor %}
+    </div>
+    {% if c.service_areas %}
+    <ul class="chips rise" role="list" style="margin-top:2rem;justify-content:center">
+      {% for area in c.service_areas %}<li class="chip">{{ area }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if phone_href %}
+    <div class="actions rise">
+      <a class="btn btn-primary" href="tel:{{ phone_href }}">Call {{ phone_display }}</a>
+      {% if lead.address %}
+      <a class="chev" href="{{ map_url }}" rel="noopener">Get directions</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+
+{# ------------------------------------------------------------- why call #}
+{# The eyebrow *is* the heading here — same words, same place, same styling —
+   so the outline is complete without anything new appearing on screen. #}
+{% macro why_grid(art=True, night=False, heading='Why call us', klass='cards',
+                  first=0) %}
+<section class="section{{ ' on-night' if night else '' }}" id="why" aria-labelledby="why-h">
+  <div class="shell">
+    <h2 class="eyebrow rise" id="why-h">{{ heading }}</h2>
+    <ul class="{{ klass }} rise" role="list" style="margin-top:1.75rem">
+      {% for point in c.why_us %}
+      <li class="{{ 'card' if klass.startswith('cards') else 'tile' }}">
+        {% if art %}
+        {{ media.art(first + loop.index0, klass='card-art', ratio='5/2', parallax=False) }}
+        {% endif %}
+        <p class="{{ 'card-name' if klass.startswith('cards') else 'tile-name' }}">{{ point }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{% macro why_row(night=True, heading='Why call us') %}
+<section class="section-tight{{ ' on-night' if night else '' }}" id="why" aria-labelledby="why-h">
+  <div class="shell-wide">
+    <h2 class="eyebrow rise" id="why-h">{{ heading }}</h2>
+    <ul class="cards rise" role="list" style="margin-top:1.5rem">
+      {% for point in c.why_us %}
+      <li class="card" style="border:none;background:transparent;padding:0">
+        <p class="subhead">{{ point }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# -------------------------------------------------------------- process #}
+{% macro process_steps(night=False, heading='How it works', sunk=False) %}
+{% if c.process %}
+<section class="section{{ ' on-night' if night else '' }}{{ ' section-sunk' if sunk else '' }}" id="process" aria-labelledby="process-h">
+  <div class="shell">
+    <div class="head rise">
+      <p class="eyebrow">{{ heading }}</p>
+      <h2 class="headline" id="process-h">{{ c.process_headline or 'What happens after you call' }}</h2>
+    </div>
+    <ul class="steps rise" role="list" style="margin-top:3rem">
+      {% for step in c.process %}
+      <li class="step">
+        <span class="step-rule" aria-hidden="true"></span>
+        <h3 class="step-name">{{ step.name }}</h3>
+        <p class="step-copy">{{ step.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# ------------------------------------------------------------------ faq #}
+{# A native disclosure: keyboard-operable with no JavaScript, and the marker is
+   a shape rather than a colour (1.4.1). The first one is open so the section
+   is not a wall of closed rows. #}
+{% macro faq_list(night=False, sunk=True, heading='Questions') %}
+{% if c.faq %}
+<section class="section{{ ' on-night' if night else '' }}{{ ' section-sunk' if sunk and not night else '' }}" id="faq" aria-labelledby="faq-h">
+  <div class="shell-narrow">
+    <div class="head rise">
+      <p class="eyebrow">{{ heading }}</p>
+      <h2 class="headline" id="faq-h">Before you call</h2>
+    </div>
+    <ul class="faq rise" role="list" style="margin-top:2.5rem">
+      {% for item in c.faq %}
+      <li>
+        <details class="faq-item"{{ ' open' if loop.first else '' }}>
+          <summary class="faq-q">{{ item.q }}</summary>
+          <p class="faq-a">{{ item.a }}</p>
+        </details>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# -------------------------------------------------------------- gallery #}
+{# A rail that snaps, with no arrows and no JavaScript. Every slot falls back
+   to generated artwork, so the section is not empty on a site that has no
+   photographs yet. #}
+{% macro gallery_rail(count=4, first=0, night=False, heading='A look around',
+                      title='Work we do') %}
+<section class="section{{ ' on-night' if night else '' }}" id="gallery" aria-labelledby="gallery-h">
+  <div class="shell">
+    <div class="head rise">
+      <p class="eyebrow">{{ heading }}</p>
+      <h2 class="headline" id="gallery-h">{{ title }}</h2>
+    </div>
+  </div>
+  <div class="shell-wide">
+    <ul class="rail" role="list" style="margin-top:2.5rem">
+      {% for i in range(count) %}
+      <li class="rail-item">
+        <div class="rail-card">
+          {{ media.art(first + i, 'square', 'rail-art', parallax=False) }}
+          {% if photos and photos|length > (first + i) and photos[first + i].alt %}
+          <div class="rail-body"><p class="card-copy">{{ photos[first + i].alt }}</p></div>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# --------------------------------------------------------------- quote #}
+{# Only ever rendered where the words are attributable: a showcase demo of a
+   business that does not exist, or a line the owner actually said and the
+   operator recorded in verified_facts. A testimonial nobody gave is precisely
+   the fabrication the review step exists to stop. #}
+{% macro quote_band(night=True) %}
+{% if c.quote and c.quote.text %}
+<section class="band{{ ' on-night' if night else '' }}" aria-labelledby="quote-h">
+  <div class="shell centre">
+    <h2 class="sr-only" id="quote-h">What people say</h2>
+    <blockquote class="quote rise">
+      <p class="quote-text">&ldquo;{{ c.quote.text }}&rdquo;</p>
+      <cite class="quote-by">{{ c.quote.by }}</cite>
+    </blockquote>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# ------------------------------------------------------------ the band #}
+{% macro cta_band(night=False, wash=True) %}
+<section class="band{{ ' on-night' if night else '' }}{{ ' section-wash' if wash and not night else '' }}" aria-labelledby="band-h">
+  <div class="shell-wide band-in">
+    <h2 class="headline rise" id="band-h" style="max-width:22ch">{{ c.cta_line }}</h2>
+    {% if phone_href %}
+    <div class="actions rise" style="margin-top:0">
+      <a class="btn btn-primary btn-lg" href="tel:{{ phone_href }}">Call {{ phone_display }}</a>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+
+{# --------------------------------------------------------------- areas #}
+{% macro areas_strip(night=False) %}
+{% if c.service_areas %}
+<section class="section-tight{{ ' on-night' if night else '' }}" id="areas" aria-labelledby="areas-h">
+  <div class="shell">
+    <h2 class="eyebrow rise" id="areas-h">Where we work</h2>
+    <ul class="chips rise" role="list" style="margin-top:1.2rem">
+      {% for area in c.service_areas %}<li class="chip">{{ area }}</li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# ------------------------------------------------------------- contact #}
+{# `title` exists because the band above it usually already says `cta_line`,
+   and a page that asks the same question twice in two adjacent sections reads
+   as a template rather than as a website. Templates that render `cta_band`
+   pass something else here; the ones that do not let it default. #}
+{% macro contact_block(night=True, eyebrow='Contact', title='') %}
+<section class="section{{ ' on-night' if night else '' }}" id="contact" aria-labelledby="contact-h">
+  <div class="shell">
+    <p class="eyebrow rise">{{ eyebrow }}</p>
+    <h2 class="headline measure rise" id="contact-h">{{ title or c.cta_line }}</h2>
+    <div class="contact-grid">
+      <div class="rise">
+        {% if phone_href %}
+        <a class="phone-xl" href="tel:{{ phone_href }}">{{ phone_display }}</a>
+        {% endif %}
+        {% if lead.address %}
+        <address class="addr">
+          {{ lead.address }}<br>
+          <a class="chev" href="{{ map_url }}" rel="noopener">Get directions</a>
+        </address>
+        {% endif %}
+        {% if c.closing_note %}
+        <p class="fine" style="margin-top:1.5rem;max-width:44ch">{{ c.closing_note }}</p>
+        {% endif %}
+      </div>
+      {% if days %}
+      <div class="rise">
+        <table class="hours-table">
+          <caption class="hours-caption">Opening hours</caption>
+          <tbody>
+            {% for day in days %}
+            <tr data-day="{{ day.js_index }}">
+              <th scope="row">{{ day.day }}</th>
+              <td>{{ day.label }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# ----------------------------------------------------------- timetable #}
+{# The same opening hours as the footer table, laid out as a schedule. Used
+   where the week *is* the product — a gym, a studio, a class timetable. The
+   footer table stays: this is a second presentation of it, not a replacement,
+   and it is aria-hidden for that reason. #}
+{% macro timetable(night=False, heading='The week', title='When we are open') %}
+{% if days %}
+<section class="section{{ ' on-night' if night else '' }}" id="week" aria-labelledby="week-h">
+  <div class="shell-wide split">
+    <div class="rise">
+      <p class="eyebrow">{{ heading }}</p>
+      <h2 class="headline" id="week-h">{{ title }}</h2>
+      {% if hours_summary %}<p class="lede" style="margin-top:1.2rem">Most days, {{ hours_summary }}.</p>{% endif %}
+      {{ media.call_plate('Book by phone') }}
+    </div>
+    <ul class="timetable rise" role="list" aria-hidden="true">
+      {% for day in days %}
+      <li class="slot"><span class="slot-day">{{ day.day }}</span><span class="slot-time">{{ day.label }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}

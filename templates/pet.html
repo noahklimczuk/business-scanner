@@ -1,0 +1,33 @@
+{# The yard. Enormous radii, cards that lean, and a reveal that overshoots and
+   settles. Nothing on this page is straight and nothing on it is serious.
+
+   Image slots: 0-1 hero stack · 2-5 gallery · 6-8 why. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_tilt(fallback='For pets', label='Call', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_tiles(title='What we do', eyebrow='Services', sunk=True) }}
+{{ blocks.process_steps(heading='A visit, start to finish') }}
+{{ blocks.gallery_rail(count=4, first=2, heading='Our guests', title='A look around') }}
+{{ blocks.why_grid(art=True, first=6, heading='Why us') }}
+{{ blocks.about_centre(night=True) }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Drop in', title='Where to find us') }}
+{% endblock %}
+
+{% block extra_css %}
+/* Two cards, leaning against each other. The back one is positioned behind
+   rather than earlier in the markup, so the artwork carrying the monogram is
+   still the first one on the page. */
+.tilt-stack { position: relative; padding: 1.5rem 1.5rem 2.5rem; }
+.tilt { border-radius: var(--r-panel); overflow: hidden; }
+.tilt-front { position: relative; z-index: 2; transform: rotate(-2.5deg); }
+.tilt-back { position: absolute; inset: 3.5rem 0 0 3rem; z-index: 1; transform: rotate(4deg); opacity: .85; }
+.tile:hover, .card:hover { transform: translateY(-5px) rotate(-1deg); }
+{% endblock %}

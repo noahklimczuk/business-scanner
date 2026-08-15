@@ -34,12 +34,20 @@ SITES_DIR = os.environ.get("LEADSMITH_SITES") or os.path.join(ROOT, "sites")
 
 MODEL = "claude-opus-5"
 MAX_TOKENS = 8000
-CONTENT_VERSION = 1
+# 2 added the optional blocks — process, faq, service areas, the connective
+# copy. A version 1 file has none of them and renders exactly as it did, which
+# is the whole reason the number went up rather than the fields being required.
+CONTENT_VERSION = 2
 
-# The guide's ceiling for a whole site. Generated pages land near 30KB; this
+# The guide's ceiling for a whole site. Generated pages land near 45KB; this
 # only ever fires once real photographs are dropped in, which is exactly when
 # nobody is thinking about page weight and a 4MB phone photo goes unnoticed.
 PAGE_BUDGET_BYTES = 150 * 1024
+# A demo is a different product with a different job. It is opened on an iPad
+# on the shop's own wifi, not on rural LTE by someone who needs a plumber, and
+# it carries eight to twelve photographs because showing what the site could
+# look like *is* the point. Same page, same code, a budget that reflects it.
+DEMO_BUDGET_BYTES = 3 * 1024 * 1024
 
 # USD per million tokens for MODEL. Cache writes cost 1.25x input, reads 0.1x.
 PRICE_IN = 5.00
@@ -165,36 +173,117 @@ class ContentError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Template selection
 # ---------------------------------------------------------------------------
-TEMPLATE_KEYWORDS = {
+# Twelve page structures, not twelve colour schemes. See SITES.md for what each
+# one is and why it is shaped the way it is.
+#
+# Order matters: the first template whose keywords match wins, so the specific
+# categories are listed before the general ones. "Pet grooming salon" has to
+# reach `pet` rather than `salon`, and "auto glass repair" has to reach `auto`
+# rather than `trade`.
+TEMPLATE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "pet": ("pet", "pets", "dog", "dogs", "cat", "cats", "kennel", "kennels",
+            "groomer", "grooming salon", "doggy", "puppy", "aquarium",
+            "pet store", "pet shop", "animal shelter", "boarding kennel"),
+    "auto": ("auto", "automotive", "mechanic", "car repair", "garage",
+             "body shop", "collision", "tire", "tires", "tyre", "muffler",
+             "transmission", "oil change", "detailing", "car wash", "towing",
+             "motorcycle", "windshield", "auto glass", "auto parts"),
+    "clinic": ("dentist", "dental", "orthodontist", "denture", "doctor",
+               "medical", "clinic", "physician", "chiropractor", "chiropractic",
+               "physiotherapy", "physical therapy", "optometrist", "optician",
+               "eye care", "veterinary", "veterinarian", "vet", "podiatrist",
+               "audiologist", "hearing", "pharmacy", "walk-in clinic",
+               "animal hospital"),
+    "wellness": ("gym", "fitness", "yoga", "pilates", "crossfit", "martial arts",
+                 "karate", "boxing", "personal trainer", "training studio",
+                 "dance studio", "swim school", "wellness", "nutritionist",
+                 "sports club"),
+    "professional": ("lawyer", "law firm", "attorney", "solicitor", "notary",
+                     "paralegal", "accountant", "accounting", "bookkeeping",
+                     "tax", "insurance", "broker", "mortgage", "financial",
+                     "consultant", "consulting", "real estate", "realtor",
+                     "surveyor", "architect", "engineering firm", "translation",
+                     "recruitment", "employment agency"),
+    "education": ("school", "academy", "tutor", "tutoring", "daycare",
+                  "day care", "preschool", "montessori", "childcare",
+                  "learning centre", "learning center", "driving school",
+                  "music school", "music lessons", "language school",
+                  "college", "training centre", "training center"),
+    "creative": ("photographer", "photography", "videographer", "film",
+                 "studio", "design", "graphic", "print shop", "printing",
+                 "sign shop", "signs", "event planner", "wedding planner",
+                 "dj", "framing", "art gallery", "tattoo",
+                 "recording studio", "marketing agency", "web design"),
+    "home": ("landscaping", "landscaper", "lawn", "lawn care", "gardening",
+             "tree service", "arborist", "snow removal", "cleaning",
+             "cleaners", "janitorial", "maid", "pest control", "pool",
+             "pool service", "window cleaning", "pressure washing",
+             "junk removal", "moving", "movers", "septic", "chimney"),
     "food": ("restaurant", "cafe", "coffee", "bakery", "bar", "pizza", "deli",
              "diner", "grill", "caterer", "catering", "juice", "ice cream",
-             "butcher", "food"),
+             "butcher", "food", "pub", "brewery", "bistro", "sushi",
+             "steakhouse", "sandwich", "taco", "burger", "noodle", "kitchen"),
     "salon": ("salon", "barber", "hair", "nail", "spa", "beauty", "esthetic",
-              "lash", "brow", "massage", "tanning", "grooming", "makeup"),
+              "lash", "brow", "massage", "tanning", "grooming", "makeup",
+              "waxing", "hairdresser", "stylist"),
+    "retail": ("shop", "store", "boutique", "gift", "clothing", "jewel",
+               "jewellery", "jewelry", "furniture", "hardware", "bookstore",
+               "book shop", "bike shop", "toy", "grocer", "market",
+               "convenience", "thrift", "consignment", "florist", "garden centre",
+               "garden center", "nursery", "supply"),
+    "trade": ("roofing", "roofer", "plumber", "plumbing", "electrician",
+              "electrical", "hvac", "heating", "cooling", "furnace",
+              "air conditioning", "contractor", "construction", "carpenter",
+              "carpentry", "renovation", "remodeling", "remodelling",
+              "flooring", "drywall", "painter", "painting", "masonry",
+              "concrete", "paving", "fencing", "welding", "handyman",
+              "excavation", "insulation", "waterproofing", "locksmith",
+              "appliance repair", "garage door", "window", "door", "siding",
+              "eavestrough", "gutter", "deck", "landscape construction"),
 }
-TEMPLATES = ["trade", "food", "salon"]
+TEMPLATES = list(TEMPLATE_KEYWORDS)
+DEFAULT_TEMPLATE = "trade"
 
 
 def template_for(category: str | None) -> str:
-    # Whole words only. A substring match sends "Barber shop" to the food
-    # template, because "barber" contains "bar".
+    """The template a Google category belongs to.
+
+    Whole words only. A substring match sends "Barber shop" to the food
+    template, because "barber" contains "bar" — and that is not hypothetical,
+    it is what the first version of this did.
+    """
     c = (category or "").lower()
     for name, keywords in TEMPLATE_KEYWORDS.items():
-        if any(re.search(rf"\b{re.escape(k)}\b", c) for k in keywords):
+        if any(re.search(rf"(?<![a-z]){re.escape(k)}(?![a-z])", c)
+               for k in keywords):
             return name
-    return "trade"
+    return DEFAULT_TEMPLATE
 
 
 # ---------------------------------------------------------------------------
 # The contract with the model
 # ---------------------------------------------------------------------------
+# What the model is asked for. Everything here is required of the *model* —
+# strict JSON-schema modes insist that every declared property is required, and
+# a model that can write three services can write three questions.
+#
+# `review()` is deliberately looser: only the version 1 core is mandatory there,
+# so a content.json written before any of this existed still renders.
+#
+# Two fields are conspicuously absent, and their absence is the point.
+# `service_areas` would have the model listing neighbouring towns it cannot
+# know they serve, and `quote` would have it writing a testimonial nobody gave.
+# Both exist in content.json; both are filled in by the operator from what the
+# owner actually said, and the fabrication check treats them accordingly.
 CONTENT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
+        "hero_eyebrow": {"type": "string"},
         "hero_headline": {"type": "string"},
         "hero_sub": {"type": "string"},
         "about": {"type": "array", "items": {"type": "string"},
                   "minItems": 2, "maxItems": 2},
+        "services_intro": {"type": "string"},
         "services": {
             "type": "array", "minItems": 3, "maxItems": 6,
             "items": {
@@ -205,16 +294,45 @@ CONTENT_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        "process_headline": {"type": "string"},
+        "process": {
+            "type": "array", "minItems": 3, "maxItems": 4,
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"},
+                               "description": {"type": "string"}},
+                "required": ["name", "description"],
+                "additionalProperties": False,
+            },
+        },
+        "faq": {
+            "type": "array", "minItems": 3, "maxItems": 5,
+            "items": {
+                "type": "object",
+                "properties": {"q": {"type": "string"}, "a": {"type": "string"}},
+                "required": ["q", "a"],
+                "additionalProperties": False,
+            },
+        },
         "why_us": {"type": "array", "items": {"type": "string"},
                    "minItems": 3, "maxItems": 3},
         "cta_line": {"type": "string"},
+        "closing_note": {"type": "string"},
         "meta_title": {"type": "string"},
         "meta_description": {"type": "string"},
     },
-    "required": ["hero_headline", "hero_sub", "about", "services", "why_us",
-                 "cta_line", "meta_title", "meta_description"],
+    "required": ["hero_eyebrow", "hero_headline", "hero_sub", "about",
+                 "services_intro", "services", "process_headline", "process",
+                 "faq", "why_us", "cta_line", "closing_note", "meta_title",
+                 "meta_description"],
     "additionalProperties": False,
 }
+
+# What `review()` insists on, which is version 1 and nothing more. Everything
+# added since is optional, so an older content.json is not retroactively broken
+# by a field that did not exist when it was written.
+REQUIRED_FIELDS = ("hero_headline", "hero_sub", "about", "services", "why_us",
+                   "cta_line", "meta_title", "meta_description")
 
 SYSTEM_PROMPT = """\
 You write the copy for a small local business's website. The site is one page \
@@ -249,10 +367,26 @@ best, premier, leading, top-rated, number one, trusted, reliable, dedicated, \
 passionate, committed, quality you can count on, state-of-the-art, one-stop, \
 nestled, proudly serving, we pride ourselves, unmatched, second to none.
 
-Lengths: hero_headline under 60 characters. hero_sub one sentence. Each about \
-paragraph two or three sentences. Each service description one sentence. Each \
-why_us point under 12 words and specific to this trade. cta_line one short \
-line that asks for the call. meta_title under 60 characters and containing the \
+The questions in `faq` are the ones a person actually asks before they ring: \
+where are you, when are you open, what do you do, what happens when I call. \
+Answer them from the hours, the address, the town and the services in the \
+input, and from nothing else. If the input does not answer a question, do not \
+ask it. "Do you offer free estimates?" is not a question you can answer.
+
+The steps in `process` describe what happens after the call, in the ordinary \
+shape of this kind of work — someone rings, someone comes and looks, the work \
+is scheduled, the work is done. Describe the trade's own sequence. Do not put \
+a timescale, a price or a guarantee in any of them.
+
+Lengths: hero_eyebrow two or three words. hero_headline under 60 characters. \
+hero_sub one sentence. Each about paragraph two or three sentences. \
+services_intro one sentence. Each service description one sentence. \
+process_headline under 60 characters. Each process step name two or three \
+words and its description one sentence. Each faq question under 80 characters \
+and its answer one or two sentences. Each why_us point under 12 words and \
+specific to this trade. cta_line one short line that asks for the call. \
+closing_note one short line — the practical thing worth knowing when someone \
+is about to visit or ring. meta_title under 60 characters and containing the \
 business name and town. meta_description under 155 characters.
 
 Return only the JSON object."""
@@ -377,28 +511,62 @@ SUPERLATIVES = [
     "trusted name", "unrivalled", "unrivaled", "finest", "superior",
 ]
 
+# Keyed on the leaf field name, so `faq[2].a` is measured by the limit for "a".
+# A limit that is not here is not enforced, which is the right default for copy
+# whose length is a matter of taste rather than of layout.
 _TEXT_LIMITS = {
+    "hero_eyebrow": 48,
     "hero_headline": 70,
     "hero_sub": 160,
+    "services_intro": 200,
+    "process_headline": 70,
     "cta_line": 90,
+    "closing_note": 180,
     "meta_title": 60,
     "meta_description": 155,
+    "q": 100,
+    "a": 320,
 }
+
+# Everything in a content.json that is not copy. `photos` is filenames and alt
+# text, checked by `accessibility_issues()` instead; the rest is bookkeeping.
+# Anything not listed here is copy and gets reviewed, which is the point: a
+# field added next year is guarded the moment it exists rather than the moment
+# somebody remembers to add it to a list.
+_NOT_COPY = {"photos", "verified_facts", "version", "place_id", "template",
+             "model", "generated_at", "generated_by", "cost_usd", "facts",
+             "rejected_at", "issues", "stock", "demo", "showcase", "copy"}
 
 
 def _strings(content: dict[str, Any]) -> list[tuple[str, str]]:
+    """Every string in the content, with the path that names it.
+
+    Version 1 enumerated the five known fields by hand, which meant every field
+    added afterwards had to remember to add itself to the check — and one that
+    forgot would ship unreviewed. Walking the object instead makes the default
+    "reviewed", and the exceptions are the short list above.
+    """
     out: list[tuple[str, str]] = []
-    for key in ("hero_headline", "hero_sub", "cta_line", "meta_title",
-                "meta_description"):
-        out.append((key, str(content.get(key, ""))))
-    for i, para in enumerate(content.get("about") or []):
-        out.append((f"about[{i}]", str(para)))
-    for i, point in enumerate(content.get("why_us") or []):
-        out.append((f"why_us[{i}]", str(point)))
-    for i, svc in enumerate(content.get("services") or []):
-        out.append((f"services[{i}].name", str(svc.get("name", ""))))
-        out.append((f"services[{i}].description", str(svc.get("description", ""))))
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            out.append((path, value))
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                if key in _NOT_COPY:
+                    continue
+                walk(item, f"{path}.{key}" if path else str(key))
+        elif isinstance(value, (list, tuple)):
+            for i, item in enumerate(value):
+                walk(item, f"{path}[{i}]")
+
+    walk(content, "")
     return out
+
+
+def _leaf(path: str) -> str:
+    """`faq[2].a` -> `a`. The name a limit is keyed on."""
+    return re.sub(r"\[\d+\]$", "", path.rsplit(".", 1)[-1])
 
 
 def _mentions(haystack: str, term: str) -> bool:
@@ -412,7 +580,7 @@ def review(content: dict[str, Any], source: str) -> list[str]:
     source = source.lower()
 
     # -- shape ---------------------------------------------------------------
-    for key in CONTENT_SCHEMA["required"]:
+    for key in REQUIRED_FIELDS:
         if key not in content:
             issues.append(f"missing field: {key}")
     if len(content.get("about") or []) != 2:
@@ -421,15 +589,34 @@ def review(content: dict[str, Any], source: str) -> list[str]:
         issues.append("services must have 3 to 6 items")
     if len(content.get("why_us") or []) != 3:
         issues.append("why_us must be exactly three points")
+    # The optional blocks are only checked when they are there at all: an
+    # absent one is a version 1 file, a malformed one is a mistake.
+    if content.get("process") is not None and not 3 <= len(content["process"]) <= 4:
+        issues.append("process must have 3 or 4 steps")
+    if content.get("faq") is not None and not 3 <= len(content["faq"]) <= 6:
+        issues.append("faq must have 3 to 6 questions")
+    if content.get("service_areas") is not None and len(content["service_areas"]) > 10:
+        issues.append("service_areas must have 10 towns at most")
 
     for field_name, text in _strings(content):
         if not text.strip():
             issues.append(f"{field_name} is empty")
         if _HTML.search(text):
             issues.append(f"{field_name} contains markup")
-        limit = _TEXT_LIMITS.get(field_name)
+        limit = _TEXT_LIMITS.get(_leaf(field_name))
         if limit and len(text) > limit:
             issues.append(f"{field_name} is {len(text)} chars, limit {limit}")
+
+    # A town we were not told about is a fabrication like any other, and a
+    # worse one than most: "serving Aurora and Bradford" on a page for a
+    # business that does not go there is a promise the owner has to break in
+    # front of a customer. The route in is `verified_facts` — the owner said it,
+    # the operator wrote it down.
+    for i, area in enumerate(content.get("service_areas") or []):
+        if str(area).strip().lower() not in source:
+            issues.append(
+                f"service_areas[{i}] claims they cover '{area}', which is not "
+                f"in the data. Add it to verified_facts if the owner said so.")
 
     # -- fabrication ---------------------------------------------------------
     # A term is only a problem if we could not have known it. Anything already
@@ -893,7 +1080,28 @@ def _facts(lead: dict[str, Any], city: str, hours_summary: str) -> list[dict[str
     return facts if len(facts) >= 2 else []
 
 
-SERVICES_WORD = {"trade": "Services", "food": "Menu", "salon": "Services"}
+# What the nav calls the services section. It is the one word on the page that
+# has to sound like the trade rather than like a website.
+SERVICES_WORD = {
+    "trade": "Services", "food": "Menu", "salon": "Services", "auto": "Work",
+    "wellness": "Classes", "clinic": "Care", "professional": "Practice",
+    "retail": "Shop", "home": "Services", "pet": "Services",
+    "creative": "Work", "education": "Programmes",
+}
+
+# How many image slots each template hands out, in document order. This is what
+# a photo fetch asks for, and it is why `photos[3]` means "the fourth picture
+# down the page" rather than "whichever slot happens to be fourth today".
+#
+# The number at the top of each template file is the same list; if they ever
+# disagree, the template is right and this is stale. A slot with no photograph
+# falls back to generated artwork on its own, so being one short is a
+# cosmetic difference rather than a broken page.
+PHOTO_SLOTS = {
+    "trade": 6, "food": 10, "salon": 10, "auto": 7, "wellness": 4,
+    "clinic": 8, "professional": 5, "retail": 8, "home": 10, "pet": 9,
+    "creative": 8, "education": 5,
+}
 
 
 def map_link(lead: dict[str, Any]) -> str:
@@ -951,6 +1159,12 @@ class Site:
     robots: str
     template: str
     palette: dict[str, str] = field(default_factory=dict)
+    demo: bool = False
+
+    @property
+    def budget(self) -> int:
+        """The weight this page is allowed. A demo is a different product."""
+        return DEMO_BUDGET_BYTES if self.demo else PAGE_BUDGET_BYTES
 
 
 def dial_href(lead: dict[str, Any], region: str = "CA") -> str:
@@ -983,7 +1197,24 @@ def dial_href(lead: dict[str, Any], region: str = "CA") -> str:
 def render(lead: dict[str, Any], content: dict[str, Any], *,
            template: Optional[str] = None, preview: bool = True,
            site_url: str = "", operator: Optional[dict[str, Any]] = None,
-           region: str = "CA", city_hint: str = "") -> Site:
+           region: str = "CA", city_hint: str = "", demo: bool = False,
+           demo_note: str = "", showcase: bool = False) -> Site:
+    """One business plus its copy, rendered into a page.
+
+    `demo` turns on the richer build: the ribbon that says it is a sample, the
+    stock credits in the footer, and a weight budget that expects photographs.
+    It changes nothing about what may be *claimed*.
+
+    `showcase` is the one thing that does, and it exists for exactly one case:
+    the twelve portfolio sites in `demo/fixtures/`, whose businesses are
+    invented. The fabrication check protects a real business from claims nobody
+    made about them; a business that does not exist has nothing to protect, and
+    a page that cannot carry a testimonial cannot show what a page with one
+    looks like. Nothing built from a Google listing ever sets it — `build
+    --demo` on a real lead reviews its copy exactly as a production build does.
+    The accessibility check runs either way, because a blind visitor to a
+    showcase page is still a blind visitor.
+    """
     template = template or template_for(lead.get("category"))
     if template not in TEMPLATES:
         raise ContentError(f"Unknown template '{template}'. "
@@ -993,8 +1224,8 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
     # documented edit surface — if it only ran when Claude wrote the copy, then
     # hand-editing the file (the Phase 5 workflow) would walk straight past the
     # one guard protecting the pitch.
-    issues = review(content, source_text(lead, city_hint,
-                                         content.get("verified_facts")))
+    issues = [] if showcase else review(
+        content, source_text(lead, city_hint, content.get("verified_facts")))
     if issues:
         raise ContentError(
             "This copy cannot go on someone's website:\n"
@@ -1019,23 +1250,32 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
         )
 
     palette = design.palette_for(lead["place_id"], template)
+    style = design.style_for(template)
     day_list = hours_mod.parse(lead.get("hours"))
     summary = hours_mod.summary(day_list)
     city = locality(lead.get("address"))
     phone_display = lead.get("phone") or ""
     phone_href = dial_href(lead, region)
+    photo_list = visuals.photos_from(content)
 
     html = _env().get_template(f"{template}.html").render(
         lead=lead,
         c=content,
         palette=palette,
+        style=style,
         days=day_list,
         hours_summary=summary,
         week_json=hours_mod.week_minutes(day_list),
         schema=_schema(lead, content, day_list, site_url),
         stats=_facts(lead, city, summary),
         services_word=SERVICES_WORD.get(template, "Services"),
-        photos=visuals.photos_from(content),
+        photos=photo_list,
+        # Whoever took the picture gets named, on a demo and on a live site
+        # alike. Most stock licences do not require it; putting it there anyway
+        # costs one line of 12px type and settles the question permanently.
+        credits=visuals.credits_for(photo_list),
+        demo=demo,
+        demo_note=demo_note,
         # A callable, not one rendered SVG: each slot on the page asks for its
         # own variant so the compositions differ.
         make_art=lambda variant=0: Markup(visuals.artwork(
@@ -1054,7 +1294,7 @@ def render(lead: dict[str, Any], content: dict[str, Any], *,
     robots = ("User-agent: *\nDisallow: /\n" if preview
               else "User-agent: *\nAllow: /\n")
     return Site(html=squeeze_css(html), robots=robots, template=template,
-                palette=palette)
+                palette=palette, demo=demo)
 
 
 # ---------------------------------------------------------------------------

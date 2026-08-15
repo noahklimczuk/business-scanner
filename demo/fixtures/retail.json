@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "template": "retail",
+  "lead": {
+    "place_id": "demo-retail-mapletwine",
+    "name": "Maple & Twine",
+    "category": "Gift shop",
+    "address": "17 Main St, Schomberg, ON L0G 1T0, Canada",
+    "phone": "(905) 555-0147",
+    "phone_e164": "+19055550147",
+    "lat": 44.0022,
+    "lng": -79.6862,
+    "hours": [
+      "Monday: Closed",
+      "Tuesday: 10:00 AM – 5:00 PM",
+      "Wednesday: 10:00 AM – 5:00 PM",
+      "Thursday: 10:00 AM – 6:00 PM",
+      "Friday: 10:00 AM – 6:00 PM",
+      "Saturday: 9:00 AM – 5:00 PM",
+      "Sunday: 11:00 AM – 4:00 PM"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Gift shop",
+    "hero_headline": "Something worth wrapping, from the shop on Main",
+    "hero_sub": "Homeware, cards and small-batch things in Schomberg.",
+    "about": [
+      "A single room on Main Street with shelves of things we would keep ourselves: ceramics, candles, linen, cards and the sort of gift you can buy on the way to the dinner.",
+      "Most of what is here comes from makers within a few hours' drive. If you like something and it is out, ask — a lot of it can be ordered in for the following week."
+    ],
+    "services_intro": "What is on the shelves at any time of year.",
+    "services": [
+      {
+        "name": "Ceramics and glass",
+        "description": "Mugs, bowls and vases from potters we buy from directly."
+      },
+      {
+        "name": "Candles and scent",
+        "description": "Poured in small batches, in scents that are not all vanilla."
+      },
+      {
+        "name": "Cards and paper",
+        "description": "Letterpress, risograph and the occasional rude one."
+      },
+      {
+        "name": "Kitchen and table",
+        "description": "Linen, boards, tea towels and the useful end of homeware."
+      },
+      {
+        "name": "Gift wrapping",
+        "description": "Wrapped at the counter while you wait, at no charge."
+      },
+      {
+        "name": "Ordering in",
+        "description": "If it is out or you want three, we will get them for the next week."
+      }
+    ],
+    "process_headline": "Ordering something in",
+    "process": [
+      {
+        "name": "Tell us what you want",
+        "description": "In the shop or over the phone."
+      },
+      {
+        "name": "We check with the maker",
+        "description": "Most things come in within a week."
+      },
+      {
+        "name": "We ring when it lands",
+        "description": "And keep it behind the counter under your name."
+      }
+    ],
+    "faq": [
+      {
+        "q": "When are you open?",
+        "a": "Tuesday to Sunday. Saturday is the long day, from nine until five."
+      },
+      {
+        "q": "Do you wrap?",
+        "a": "Yes, at the counter, and it costs nothing."
+      },
+      {
+        "q": "Can you hold something for me?",
+        "a": "Ring and we will put it behind the counter with your name on it."
+      },
+      {
+        "q": "Is there parking?",
+        "a": "On Main Street directly outside, and in the lot behind the row."
+      }
+    ],
+    "why_us": [
+      "Bought direct from the makers",
+      "Wrapped at the counter, free",
+      "Ordered in for the following week"
+    ],
+    "cta_line": "Ring the shop and we will hold it for you",
+    "closing_note": "December Sundays we stay open until six, which is not on the sign yet.",
+    "meta_title": "Maple & Twine — Gift shop in Schomberg",
+    "meta_description": "Ceramics, candles, cards and homeware from local makers on Main Street, Schomberg.",
+    "service_areas": [
+      "Schomberg",
+      "King City",
+      "Nobleton",
+      "Bradford"
+    ],
+    "quote": {
+      "text": "I have never left with only the thing I came in for.",
+      "by": "Josie K., Schomberg"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

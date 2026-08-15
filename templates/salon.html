@@ -1,43 +1,28 @@
+{# The studio. Air, light weights, very large radii; the list leads and the
+   visual follows, which is the reverse of the trade layout.
+
+   Image slots: 0 hero · 1 services · 2-5 gallery · 6 about · 7-9 why. #}
 {% extends "base.html" %}
-{% from "partials/hero.html" import art, hero_actions with context %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
 
-{% block hero %}
-<section class="hero">
-  <div class="shell hero-copy">
-    <p class="eyebrow rise-now">{{ lead.category or 'Studio' }}{% if city %} · {{ city }}{% endif %}</p>
-    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
-    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
-    {{ hero_actions('Book by phone') }}
-  </div>
-  <div class="shell-wide">
-    {{ art(0) }}
-  </div>
-</section>
-{% endblock %}
-
-{% block services %}
-<section class="section" id="services" aria-labelledby="services-h">
-  <div class="shell-wide stage">
-    <div>
-      <p class="eyebrow rise">Services</p>
-      <h2 class="headline rise" id="services-h">What we offer</h2>
-      <ul class="stack rise" role="list" style="margin-top:2.75rem">
-        {% for service in c.services %}
-        <li class="stack-row">
-          <h3 class="stack-name">{{ service.name }}</h3>
-          <p class="stack-copy">{{ service.description }}</p>
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
-    <div class="stage-visual">
-      {{ art(1, tall=True) }}
-    </div>
-  </div>
-</section>
+{% block sections %}
+{{ heroes.hero_air(fallback='Studio', label='Book by phone', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_stack(title='What we offer', eyebrow='Services', slot=1) }}
+{{ blocks.process_steps(heading='Your visit', sunk=True) }}
+{{ blocks.gallery_rail(count=4, first=2, heading='The studio', title='A look inside') }}
+{{ blocks.about_split(night=True, slot=6) }}
+{{ blocks.why_grid(art=True, first=7, heading='Why book with us') }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list(sunk=False) }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Book in', title='Where to find us') }}
 {% endblock %}
 
 {% block extra_css %}
-/* Salon: the list leads and the visual follows, reversing the trade layout. */
+/* The studio's stage runs the other way round, so the sticky visual needs a
+   little more air above it than the trade layout gives. */
 @media (min-width: 900px) { .stage-visual { top: 7.5rem; } }
 {% endblock %}

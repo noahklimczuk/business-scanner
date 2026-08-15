@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "template": "food",
+  "lead": {
+    "place_id": "demo-food-verity",
+    "name": "Verity Bakehouse",
+    "category": "Bakery",
+    "address": "42 Wellington St E, Aurora, ON L4G 1H4, Canada",
+    "phone": "(905) 555-0118",
+    "phone_e164": "+19055550118",
+    "lat": 44.0001,
+    "lng": -79.4663,
+    "hours": [
+      "Monday: Closed",
+      "Tuesday: 7:00 AM – 3:00 PM",
+      "Wednesday: 7:00 AM – 3:00 PM",
+      "Thursday: 7:00 AM – 3:00 PM",
+      "Friday: 7:00 AM – 5:00 PM",
+      "Saturday: 7:00 AM – 5:00 PM",
+      "Sunday: 8:00 AM – 2:00 PM"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Bakery",
+    "hero_headline": "Bread, made the night before",
+    "hero_sub": "A small bakehouse on Wellington Street, open six days a week.",
+    "about": [
+      "We bake sourdough, pastry and a short list of cakes in the room behind the counter. The dough for the morning is mixed the evening before and left cold overnight.",
+      "There is no menu that runs all year. What is on the shelf is what came out of the oven this morning, and when it is gone it is gone."
+    ],
+    "services_intro": "What tends to be on the counter, most days.",
+    "services": [
+      {
+        "name": "Country sourdough",
+        "description": "A long-fermented white loaf, baked dark."
+      },
+      {
+        "name": "Butter croissants",
+        "description": "Laminated in the shop, baked twice a morning."
+      },
+      {
+        "name": "Morning buns and danishes",
+        "description": "Whatever fruit is worth using that week."
+      },
+      {
+        "name": "Seeded rye",
+        "description": "Denser, sourer, better with cheese."
+      },
+      {
+        "name": "Cakes to order",
+        "description": "Round cakes for a birthday or a Sunday, ordered ahead."
+      },
+      {
+        "name": "Coffee",
+        "description": "Filter and espresso, to sit in or take out."
+      }
+    ],
+    "process_headline": "Ordering a cake",
+    "process": [
+      {
+        "name": "Ring us",
+        "description": "Tell us the date and roughly how many people."
+      },
+      {
+        "name": "Pick a flavour",
+        "description": "From what is good that week, not from a laminated list."
+      },
+      {
+        "name": "Collect it",
+        "description": "Cakes are ready from opening on the day you asked for."
+      }
+    ],
+    "faq": [
+      {
+        "q": "What time is bread out?",
+        "a": "Loaves are on the shelf from seven. Pastry comes out through the morning."
+      },
+      {
+        "q": "Are you open Mondays?",
+        "a": "No. Tuesday to Sunday, and the ovens are off on Monday."
+      },
+      {
+        "q": "Can I order ahead?",
+        "a": "Yes — ring the shop and we will put it aside under your name."
+      },
+      {
+        "q": "Where are you?",
+        "a": "On Wellington Street East in Aurora. There is parking behind the building."
+      }
+    ],
+    "why_us": [
+      "Everything is baked in this building",
+      "Six mornings a week",
+      "Order ahead and it is put aside"
+    ],
+    "cta_line": "Ring the shop and we will put one aside",
+    "closing_note": "Sunday is a short day — we close at two, or earlier if the shelves empty.",
+    "meta_title": "Verity Bakehouse — Bakery in Aurora",
+    "meta_description": "Sourdough, pastry and cakes to order, baked daily in Aurora, Ontario.",
+    "service_areas": [
+      "Aurora",
+      "Newmarket",
+      "King City",
+      "Oak Ridges"
+    ],
+    "quote": {
+      "text": "I drive past two other bakeries to get here on a Saturday.",
+      "by": "Marcus L., Aurora"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

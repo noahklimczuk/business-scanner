@@ -1,0 +1,175 @@
+{# Nine first screens. The hero holds the <h1>, which is why none of these
+   sections carries an aria-label: the h1 names the page.
+
+   One rule they all obey and none of them can break: no copy sits on top of a
+   photograph. What is in the photograph is not known at build time — it may be
+   the owner's, it may be stock, it may be generated — so any text over it has
+   an unknowable contrast ratio, and 1.4.3 is not something to leave to luck.
+   Copy sits on a solid surface every time, and the imagery sits beside, under
+   or behind a card that is itself opaque. #}
+{% import "sections/media.html" as media with context %}
+
+
+{% macro _eyebrow(fallback) %}
+<p class="eyebrow rise-now">{{ c.hero_eyebrow or lead.category or fallback }}{% if city %} · {{ city }}{% endif %}</p>
+{% endmacro %}
+
+
+{# The slab: a dark first screen, the headline at full size, the phone plate
+   sitting in it like a number on a van door. #}
+{% macro hero_slab(fallback='Local trade', label='Call us', slot=0) %}
+<section class="hero hero-full on-night">
+  <div class="shell-wide split split-wide">
+    <div class="hero-copy" style="padding-bottom:0">
+      {{ _eyebrow(fallback) }}
+      <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+      <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+      {{ media.hero_actions('Call ' ~ phone_display) }}
+    </div>
+    <div class="rise-now rise-now-3">
+      {{ media.call_plate(label) }}
+      <div style="margin-top:1.1rem">{{ media.art(slot, 'wide') }}</div>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The editorial: a rule, a serif headline, and one image standing beside it. #}
+{% macro hero_editorial(fallback='Local business', label='Call', slot=0,
+                        flip=False) %}
+<section class="hero hero-full">
+  <div class="shell-wide split{{ ' split-flip' if flip else '' }}">
+    <div class="hero-copy" style="padding-bottom:0">
+      {{ _eyebrow(fallback) }}
+      <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+      <p class="lede measure-wide" style="margin-top:1.6rem">{{ c.hero_sub }}</p>
+      {{ media.hero_actions(label ~ ' ' ~ phone_display) }}
+    </div>
+    <div class="rise-now rise-now-3">{{ media.art(slot, 'tall') }}</div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The air: everything centred, nothing crowded, the image a wide band under
+   the type. For the templates whose whole promise is calm. #}
+{% macro hero_air(fallback='Studio', label='Book by phone', slot=0) %}
+<section class="hero hero-full">
+  <div class="shell centre hero-copy">
+    {{ _eyebrow(fallback) }}
+    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+    <p class="lede measure-wide" style="margin-top:1.6rem">{{ c.hero_sub }}</p>
+    {{ media.hero_actions(label) }}
+  </div>
+  <div class="shell-wide rise-now rise-now-4">{{ media.art(slot, 'wide') }}</div>
+</section>
+{% endmacro %}
+
+
+{# The dash: a workshop docket. Uppercase display, a monospaced data row, and
+   the ticker running under all of it. #}
+{% macro hero_dash(fallback='Garage', label='Call the shop', slot=0) %}
+<section class="hero hero-full on-night">
+  <div class="shell-wide split">
+    <div class="hero-copy" style="padding-bottom:0">
+      {{ _eyebrow(fallback) }}
+      <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+      <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+      {{ media.hero_actions(label) }}
+    </div>
+    <div class="rise-now rise-now-3">{{ media.art(slot, 'square') }}</div>
+  </div>
+  <div class="shell-wide" style="margin-top:clamp(2.5rem,6vw,4.5rem)">{{ media.marquee() }}</div>
+</section>
+{% endmacro %}
+
+
+{# The surge: oversized, centred, and standing on the plate. #}
+{% macro hero_surge(fallback='Studio', label='Call to start', slot=0) %}
+<section class="hero hero-full on-night">
+  <div class="shell centre hero-copy">
+    {{ _eyebrow(fallback) }}
+    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+    {{ media.hero_actions(label) }}
+  </div>
+  <div class="shell-wide split" style="align-items:stretch">
+    <div class="rise-now rise-now-3">{{ media.art(slot, 'wide') }}</div>
+    <div class="rise-now rise-now-4">{{ media.call_plate('Call us') }}</div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The block: colour blocks that meet in the middle. Loud, cheerful, and the
+   copy still sits on its own solid ground. #}
+{% macro hero_block(fallback='Local shop', label='Call', slot=0) %}
+<section class="hero hero-full section-wash">
+  <div class="shell-wide split">
+    <div class="hero-copy" style="padding-bottom:0">
+      {{ _eyebrow(fallback) }}
+      <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+      <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+      {{ media.hero_actions(label ~ ' ' ~ phone_display) }}
+    </div>
+    <div class="rise-now rise-now-3">{{ media.art(slot, 'square') }}</div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The property: a wide landscape band, and the copy on a card that overlaps
+   it. The card is opaque, so nothing is ever read against the photograph. #}
+{% macro hero_scape(fallback='Local service', label='Call', slot=0) %}
+<section class="hero">
+  <div class="shell-wide">{{ media.art(slot, 'wide', 'hero-scape-art') }}</div>
+  <div class="shell hero-scape-card rise-now">
+    <div class="plate" style="padding:clamp(1.75rem,4vw,2.75rem)">
+      {{ _eyebrow(fallback) }}
+      <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+      <p class="lede measure-wide" style="margin-top:1.3rem">{{ c.hero_sub }}</p>
+      {{ media.hero_actions(label ~ ' ' ~ phone_display) }}
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The tilt: a stack of cards that lean. Nothing here is straight, on purpose. #}
+{% macro hero_tilt(fallback='Local', label='Call', slot=0) %}
+<section class="hero hero-full">
+  <div class="shell-wide split">
+    <div class="hero-copy" style="padding-bottom:0">
+      {{ _eyebrow(fallback) }}
+      <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+      <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
+      {{ media.hero_actions(label ~ ' ' ~ phone_display) }}
+    </div>
+    {# The front card is first in the markup and the back one is positioned
+       behind it, rather than the other way round: slot 0 is the only artwork
+       that carries the monogram, and it should be the one on top. #}
+    <div class="tilt-stack rise-now rise-now-3">
+      <div class="tilt tilt-front">{{ media.art(slot, 'square') }}</div>
+      <div class="tilt tilt-back">{{ media.art(slot + 1, 'square', parallax=False) }}</div>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The frame: cinematic, dark, thin type, and one image treated like a print
+   in a gallery — matted, centred, and given room. #}
+{% macro hero_frame(fallback='Studio', label='Get in touch', slot=0) %}
+<section class="hero hero-full on-night">
+  <div class="shell centre hero-copy">
+    {{ _eyebrow(fallback) }}
+    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
+    <p class="lede measure-wide" style="margin-top:1.7rem">{{ c.hero_sub }}</p>
+    {{ media.hero_actions(label) }}
+  </div>
+  <div class="shell-wide rise-now rise-now-4">
+    <div class="matte">{{ media.art(slot, 'wide') }}</div>
+  </div>
+</section>
+{% endmacro %}

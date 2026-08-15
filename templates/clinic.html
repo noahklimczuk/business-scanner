@@ -1,0 +1,22 @@
+{# The waiting room. Cool, quiet, and roomy — the rhythm is a fifth longer than
+   any other template and every corner is soft. Questions get a full section,
+   because in this category the questions are the objection.
+
+   Image slots: 0 hero · 1-6 services · 7 about. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_air(fallback='Clinic', label='Call to book', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_soft(title='How we help', eyebrow='Care we provide', first=1) }}
+{{ blocks.process_steps(heading='Your appointment') }}
+{{ blocks.why_grid(art=False, klass='tiles', heading='What to expect') }}
+{{ blocks.about_split(night=True, flip=True, slot=7) }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Visit us', title='Where to find us') }}
+{% endblock %}

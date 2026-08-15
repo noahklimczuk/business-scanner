@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "template": "salon",
+  "lead": {
+    "place_id": "demo-salon-fernpoppy",
+    "name": "Fern & Poppy Hair Studio",
+    "category": "Hair salon",
+    "address": "9 Holland St W, Bradford, ON L3Z 2B3, Canada",
+    "phone": "(905) 555-0173",
+    "phone_e164": "+19055550173",
+    "lat": 44.1141,
+    "lng": -79.5652,
+    "hours": [
+      "Monday: Closed",
+      "Tuesday: 10:00 AM – 7:00 PM",
+      "Wednesday: 10:00 AM – 7:00 PM",
+      "Thursday: 10:00 AM – 8:00 PM",
+      "Friday: 9:00 AM – 6:00 PM",
+      "Saturday: 9:00 AM – 4:00 PM",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Hair studio",
+    "hero_headline": "Hair that behaves on the days you have no time",
+    "hero_sub": "A four-chair studio on Holland Street, by appointment.",
+    "about": [
+      "We cut, colour and treat hair in a small room with four chairs and no music loud enough to shout over. Appointments are booked with a person rather than with the salon.",
+      "Consultations happen before anything is mixed. If what you have asked for will not work on the hair you have, you will be told so then, not afterwards."
+    ],
+    "services_intro": "What we do, and roughly how long to set aside.",
+    "services": [
+      {
+        "name": "Cut and finish",
+        "description": "A consultation, a cut, and a blow-dry you could repeat at home."
+      },
+      {
+        "name": "Colour and gloss",
+        "description": "Single-process colour, root touch-ups and shine treatments."
+      },
+      {
+        "name": "Foils and balayage",
+        "description": "Hand-painted and foiled lightening, done over more than one visit if it needs it."
+      },
+      {
+        "name": "Treatments",
+        "description": "Bond-building and conditioning for hair that has had a hard year."
+      },
+      {
+        "name": "Blow-dry and styling",
+        "description": "For a wedding, a photograph, or a Thursday."
+      },
+      {
+        "name": "Fringe trims",
+        "description": "Between appointments, in and out in ten minutes."
+      }
+    ],
+    "process_headline": "Your first visit",
+    "process": [
+      {
+        "name": "We talk first",
+        "description": "Fifteen minutes on what you want and what your hair will do."
+      },
+      {
+        "name": "We agree a plan",
+        "description": "Sometimes that is one visit, sometimes it is three."
+      },
+      {
+        "name": "You leave with instructions",
+        "description": "What to use, and how to get the same result at home."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Do I need an appointment?",
+        "a": "Yes. Ring the studio and we will find a time — Thursdays run late."
+      },
+      {
+        "q": "When are you open?",
+        "a": "Tuesday to Saturday. Thursday is the late evening, until eight."
+      },
+      {
+        "q": "Do you do consultations before colour?",
+        "a": "Always, and they are part of the appointment rather than something extra."
+      },
+      {
+        "q": "Where do I park?",
+        "a": "On Holland Street, or in the municipal lot round the corner."
+      }
+    ],
+    "why_us": [
+      "Four chairs, never rushed",
+      "Consultation before anything is mixed",
+      "You leave knowing how to repeat it"
+    ],
+    "cta_line": "Ring the studio and we will find you a time",
+    "closing_note": "If you are running late, ring — we will usually be able to shuffle things.",
+    "meta_title": "Fern & Poppy Hair Studio — Hair salon in Bradford",
+    "meta_description": "Cutting, colour, foils and treatments in a four-chair studio in Bradford, Ontario.",
+    "service_areas": [
+      "Bradford",
+      "Newmarket",
+      "Holland Landing",
+      "Schomberg"
+    ],
+    "quote": {
+      "text": "First time in years someone told me what my hair would not do, instead of just agreeing with me.",
+      "by": "Priya S., Bradford"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

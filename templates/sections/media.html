@@ -1,0 +1,101 @@
+{# The pieces every template reuses: image slots, the call plate, the actions
+   row, the ticker and the demo ribbon.
+
+   The image slot is a <div>, not a <figure>. A figure is announced as one, and
+   a figure with no caption wrapping a decorative drawing is a stop on the
+   screen reader's tour that leads nowhere. A photograph with real alt text
+   says what it is through the alt; the wrapper adds nothing either way. #}
+
+{# `index` is the slot's position on the page, and it is both the photograph it
+   claims and the artwork variant it falls back to. Templates hand out slot
+   numbers in document order, contiguously from zero: that is what makes
+   `photos[3]` mean "the fourth picture down the page" to whoever is filling
+   content.json, and what guarantees no two slots render the same composition. #}
+{% macro art(index=0, shape='', klass='', parallax=True, ratio='') %}
+<div class="art-panel{% if shape %} art-panel-{{ shape }}{% endif %}{% if klass %} {{ klass }}{% endif %}{% if style.grain %} grain{% endif %}"{% if ratio %} style="aspect-ratio:{{ ratio }}"{% endif %}>
+  {% if photos and photos|length > index %}
+  {# alt is always written, never omitted. Empty means "decoration, skip this",
+     which is a claim the operator has to make explicitly in content.json;
+     a missing alt fails the build rather than shipping (1.1.1). #}
+  <img class="art-photo{% if parallax %} drift{% endif %}" src="{{ photos[index].src }}"
+       alt="{{ photos[index].alt }}"
+       {% if photos[index].width %}width="{{ photos[index].width }}"{% endif %}
+       {% if photos[index].height %}height="{{ photos[index].height }}"{% endif %}
+       {% if index > 0 %}loading="lazy" decoding="async"{% else %}fetchpriority="high"{% endif %}>
+  {% else %}
+  {{ make_art(index) }}
+  {% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro hero_actions(primary_label, klass='rise-now rise-now-3') %}
+{% if phone_href %}
+<div class="actions {{ klass }}">
+  <a class="btn btn-primary btn-lg" href="tel:{{ phone_href }}">{{ primary_label }}</a>
+  {% if lead.address %}
+  <a class="chev" href="{{ map_url }}" rel="noopener">Get directions</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{# A phone number the size of a headline inside a bordered plate — the visual
+   language of a van door, and the only thing on the page that has to work when
+   someone is standing outside in the rain. #}
+{% macro call_plate(label='Call us') %}
+{% if phone_href %}
+<a class="plate" href="tel:{{ phone_href }}">
+  <span class="plate-label"><span>{{ label }}</span><span>{{ city or 'Local' }}</span></span>
+  <span class="plate-number">{{ phone_display }}</span>
+  <span class="plate-foot">
+    {% if days %}
+    <span class="pill" data-openstate hidden>
+      <span class="pill-dot" aria-hidden="true"></span><span data-openlabel>Hours</span>
+    </span>
+    {% endif %}
+    {% if hours_summary %}
+    <strong>{{ hours_summary }}</strong>
+    {% elif not days %}
+    <span>Tap to dial</span>
+    {% endif %}
+  </span>
+</a>
+{% endif %}
+{% endmacro %}
+
+
+{# The services list, said again as a ticker. It moves on a scroll timeline
+   rather than a clock, so it is never "moving content that starts
+   automatically" and WCAG 2.2.2 does not apply. aria-hidden because every word
+   in it is already on the page. #}
+{% macro marquee() %}
+{% if c.services %}
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    {% for _ in range(3) %}
+    {% for service in c.services %}
+    <span class="marquee-item">{{ service.name }}</span>
+    {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{# A demo says it is one, at the top of the page and again in the footer.
+   Not squeamishness: it is what turns "that isn't my shop" into "day one is me
+   photographing yours", which is the better half of the conversation. #}
+{% macro ribbon() %}
+{% if demo %}
+<div class="ribbon">
+  <div class="shell-wide ribbon-in">
+    <span class="ribbon-tag">Demo</span>
+    <span><strong>{{ lead.name }}</strong> — a sample site{% if demo_note %}. {{ demo_note }}{% endif %}</span>
+    {% if photos %}<span>Photography is licensed stock, not this business's own.</span>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}

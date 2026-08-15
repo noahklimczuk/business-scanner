@@ -9,6 +9,12 @@
     "base_url": ""
   },
 
+  "//stock": "Photographs for demo sites only. Pexels is the default because its licence allows downloading and self-hosting, which is what keeps a demo working in a shop with bad wifi; unsplash works the same way. Leave the key empty and demos build with generated artwork instead — nothing breaks, they are just drawn rather than photographed.",
+  "stock": {
+    "provider": "pexels",
+    "api_key": ""
+  },
+
   "//stripe": "Read-only is enough: nothing here writes to Stripe, it reconciles what Stripe says against what we think.",
   "stripe_secret_key": "",
 

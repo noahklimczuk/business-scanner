@@ -1,0 +1,29 @@
+{# The practice. Serif, hairlines, and a numbered index of what they do — the
+   layout of a letterhead rather than a brochure. Nothing bounces; the reveal
+   is a rule drawing itself.
+
+   Image slots: 0 hero · 1 about · 2-4 the office. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_editorial(fallback='Practice', label='Call', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_index(title='What we do', eyebrow='Practice areas') }}
+{{ blocks.process_steps(heading='Working together', sunk=True) }}
+{{ blocks.why_row(night=True, heading='How we work') }}
+{{ blocks.about_split(night=False, flip=True, slot=1) }}
+{{ blocks.gallery_rail(count=3, first=2, heading='The office', title='Where you will find us') }}
+{{ blocks.quote_band(night=True) }}
+{{ blocks.faq_list() }}
+{{ blocks.contact_block(night=True, eyebrow='Get in touch') }}
+{% endblock %}
+
+{% block extra_css %}
+/* A letterhead rule under the wordmark, and nothing else added. */
+.nav { border-bottom-width: 2px; }
+.index-row { border-top-color: var(--ink); }
+.index-row + .index-row { border-top-color: var(--hairline); }
+{% endblock %}

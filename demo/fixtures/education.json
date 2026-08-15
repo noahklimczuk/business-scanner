@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "template": "education",
+  "lead": {
+    "place_id": "demo-education-compass",
+    "name": "Little Compass Learning",
+    "category": "Preschool",
+    "address": "19 Mount Albert Rd, Sharon, ON L0G 1V0, Canada",
+    "phone": "(905) 555-0110",
+    "phone_e164": "+19055550110",
+    "lat": 44.103,
+    "lng": -79.4406,
+    "hours": [
+      "Monday: 7:00 AM – 6:00 PM",
+      "Tuesday: 7:00 AM – 6:00 PM",
+      "Wednesday: 7:00 AM – 6:00 PM",
+      "Thursday: 7:00 AM – 6:00 PM",
+      "Friday: 7:00 AM – 6:00 PM",
+      "Saturday: Closed",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Early learning",
+    "hero_headline": "Somewhere they are glad to be dropped off",
+    "hero_sub": "Preschool and early learning in Sharon, open from seven.",
+    "about": [
+      "Small rooms, a fenced yard and a day built around playing, eating and going outside. Children are grouped by what they are ready for rather than strictly by age.",
+      "Parents get a note at the end of the day about what actually happened — not a template, and not only on the days something went wrong."
+    ],
+    "services_intro": "The programmes we run, and roughly who they suit.",
+    "services": [
+      {
+        "name": "Toddler room",
+        "description": "A small group, a long outdoor block and a proper nap."
+      },
+      {
+        "name": "Preschool",
+        "description": "Letters, numbers and scissors, mostly through playing."
+      },
+      {
+        "name": "Kindergarten readiness",
+        "description": "The year before school, with the routines that make September easier."
+      },
+      {
+        "name": "Before and after school",
+        "description": "Breakfast from seven and a place to be until six."
+      },
+      {
+        "name": "March break and summer",
+        "description": "Day programmes when the schools are closed."
+      },
+      {
+        "name": "Part-time places",
+        "description": "Two or three fixed days a week where we have room."
+      }
+    ],
+    "process_headline": "Getting started",
+    "process": [
+      {
+        "name": "Come and see it",
+        "description": "During a normal day, with the children in it."
+      },
+      {
+        "name": "A settling visit",
+        "description": "An hour or two with you there, before the first full day."
+      },
+      {
+        "name": "Start part-time",
+        "description": "Most children begin on two or three days and build up."
+      }
+    ],
+    "faq": [
+      {
+        "q": "What are your hours?",
+        "a": "Weekdays from seven in the morning until six in the evening."
+      },
+      {
+        "q": "Can I visit before enrolling?",
+        "a": "Please do, and during a normal day rather than after hours."
+      },
+      {
+        "q": "Do you offer part-time places?",
+        "a": "Where there is room, on fixed days. Ring and ask what is free."
+      },
+      {
+        "q": "Where are you?",
+        "a": "Mount Albert Road in Sharon, with parking and the entrance at the rear."
+      }
+    ],
+    "why_us": [
+      "Open from seven",
+      "Grouped by readiness, not only by age",
+      "A real note home at the end of the day"
+    ],
+    "cta_line": "Ring us and come and see a normal day",
+    "closing_note": "Visits are best mid-morning, when everyone is outside.",
+    "meta_title": "Little Compass Learning — Preschool in Sharon",
+    "meta_description": "Preschool, toddler rooms and before-and-after-school care in Sharon, Ontario, open from 7am.",
+    "service_areas": [
+      "Sharon",
+      "Newmarket",
+      "Queensville",
+      "Mount Albert"
+    ],
+    "quote": {
+      "text": "She asks on Saturdays whether it is a Compass day.",
+      "by": "Nadia F., Sharon"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

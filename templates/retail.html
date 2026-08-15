@@ -1,0 +1,30 @@
+{# The shopfront. Colour blocks, a shelf you push sideways, and badges. The
+   rail is the point: on a phone it is the only layout that lets six products
+   be six products rather than a very long column.
+
+   Image slots: 0 hero · 1-6 the rail · 7 about · 8-10 why. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_block(fallback='Local shop', label='Call', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_rail(title='In the shop', eyebrow='What we stock', first=1) }}
+{{ blocks.why_grid(art=False, klass='tiles', heading='Why shop here') }}
+{{ blocks.about_split(night=True, slot=7) }}
+{{ blocks.process_steps(heading='Ordering') }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Come by', title='Where the shop is') }}
+{% endblock %}
+
+{% block extra_css %}
+/* The sticker: a badge on the corner of the first card in the rail, which is
+   what makes a shelf read as a shop rather than a grid. */
+.rail-item:first-child .rail-card { border-color: var(--accent); border-width: 2px; }
+.tile:nth-child(3n) { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.tile:nth-child(3n) .tile-name, .tile:nth-child(3n) .tile-copy { color: var(--accent-fg); }
+{% endblock %}

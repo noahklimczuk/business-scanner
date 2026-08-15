@@ -110,7 +110,15 @@ def test_the_page_fits_the_weight_budget(page):
 
 def test_the_page_is_actually_small():
     # The budget is 150KB; a self-contained page has no excuse to be near it.
-    assert len(html_for().encode("utf-8")) < 40 * 1024
+    #
+    # 70KB rather than the 40KB this asserted before the rebuild, and the extra
+    # is all page rather than all bloat: ten sections instead of five, a
+    # stylesheet that carries twelve layouts instead of three, and six to ten
+    # generated compositions instead of four. It compresses to roughly 9KB over
+    # the wire, which is what the phone on rural LTE actually waits for.
+    for template in generate.TEMPLATES:
+        size = len(html_for(template).encode("utf-8"))
+        assert size < 70 * 1024, f"{template} is {size / 1024:.0f}KB"
 
 
 def test_accessibility_basics(page):
@@ -255,8 +263,11 @@ def block_after(css, opener):
 
 
 def test_generated_artwork_fills_the_image_slot_when_there_are_no_photos(page):
-    assert 'class="art-svg"' in page
-    assert 'class="art-panel"' in page
+    # `has_class` rather than a literal `class="art-panel"`: the slots carry
+    # shape modifiers now (`art-panel art-panel-tall`), and a substring match
+    # would pass or fail on which shape a template happened to pick.
+    assert has_class(page, "art-svg")
+    assert has_class(page, "art-panel")
 
 
 def test_owner_photos_replace_the_generated_artwork():
@@ -367,7 +378,7 @@ def test_every_image_slot_on_a_page_gets_its_own_composition(page):
     # Repeating one composition down the page reads as a copy-paste mistake
     # rather than a design.
     svgs = re.findall(r"<svg class=\"art-svg\".*?</svg>", page, re.S)
-    assert len(svgs) >= 4                       # hero, stage, three cards
+    assert len(svgs) >= 4                       # hero, services, and more
     assert len(set(svgs)) == len(svgs)
 
 
@@ -448,7 +459,7 @@ def test_a_generated_site_is_far_inside_the_budget(tmp_path, monkeypatch):
     monkeypatch.setattr(generate, "SITES_DIR", str(tmp_path))
     generate.write_site("p", generate.render(LEAD, GOOD))
     total, _ = generate.weigh("p")
-    assert total < generate.PAGE_BUDGET_BYTES / 4
+    assert total < generate.PAGE_BUDGET_BYTES / 2
 
 
 # --------------------------------------------------------------------------

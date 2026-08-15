@@ -1,0 +1,116 @@
+{
+  "version": 2,
+  "template": "creative",
+  "lead": {
+    "place_id": "demo-creative-ridgeway",
+    "name": "Ridgeway Photo Studio",
+    "category": "Photographer",
+    "address": "88 Brock St W, Uxbridge, ON L9P 1P4, Canada",
+    "phone": "(905) 555-0125",
+    "phone_e164": "+19055550125",
+    "lat": 44.1078,
+    "lng": -79.1247,
+    "hours": [
+      "Monday: Closed",
+      "Tuesday: 10:00 AM – 6:00 PM",
+      "Wednesday: 10:00 AM – 6:00 PM",
+      "Thursday: 10:00 AM – 8:00 PM",
+      "Friday: 10:00 AM – 6:00 PM",
+      "Saturday: 9:00 AM – 4:00 PM",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Photography",
+    "hero_headline": "Pictures you will still want on the wall in ten years",
+    "hero_sub": "A daylight studio on Brock Street, and work on location.",
+    "about": [
+      "A room with north-facing windows, a paper backdrop and lights for when the weather does not cooperate. Portraits, families and the work small businesses need for their own pages.",
+      "Sessions are unhurried. Nobody photographs well in the first ten minutes, so the first ten minutes are not the ones that count."
+    ],
+    "services_intro": "The work that comes through the studio.",
+    "services": [
+      {
+        "name": "Portrait sessions",
+        "description": "An hour in the studio, with prints and files after."
+      },
+      {
+        "name": "Family and children",
+        "description": "In the studio or outdoors, at whatever pace the children set."
+      },
+      {
+        "name": "Weddings",
+        "description": "Documentary coverage of the day, without three hours of posing."
+      },
+      {
+        "name": "Business and headshots",
+        "description": "For a team, a website or a profile, done in one visit."
+      },
+      {
+        "name": "Product photography",
+        "description": "For shops and makers who need their things to look like themselves."
+      },
+      {
+        "name": "Printing and framing",
+        "description": "Prints, albums and framing done here rather than posted off."
+      }
+    ],
+    "process_headline": "How a booking works",
+    "process": [
+      {
+        "name": "A conversation",
+        "description": "What the pictures are for, and where they will end up."
+      },
+      {
+        "name": "The session",
+        "description": "Unhurried, and longer than the good frames need."
+      },
+      {
+        "name": "You choose",
+        "description": "A gallery to pick from, with no pressure to take everything."
+      },
+      {
+        "name": "Prints and files",
+        "description": "Finished, delivered, and printed here if you want them on a wall."
+      }
+    ],
+    "faq": [
+      {
+        "q": "When is the studio open?",
+        "a": "Tuesday to Saturday. Thursday runs until eight for people who work days."
+      },
+      {
+        "q": "Do you shoot outside the studio?",
+        "a": "Yes — outdoors, at home, or at a venue, depending on what the pictures are for."
+      },
+      {
+        "q": "How long is a portrait session?",
+        "a": "About an hour in the studio, which is longer than the good frames need."
+      },
+      {
+        "q": "Where are you?",
+        "a": "Brock Street West in Uxbridge, with the studio entrance at the side."
+      }
+    ],
+    "why_us": [
+      "North-facing daylight, not just flash",
+      "Unhurried sessions",
+      "Printed and framed here"
+    ],
+    "cta_line": "Ring the studio and tell us what the pictures are for",
+    "closing_note": "Bring the clothes you actually wear — it shows, and it is always better.",
+    "meta_title": "Ridgeway Photo Studio — Photographer in Uxbridge",
+    "meta_description": "Portraits, families, weddings and business photography from a daylight studio in Uxbridge.",
+    "service_areas": [
+      "Uxbridge",
+      "Stouffville",
+      "Port Perry",
+      "Goodwood"
+    ],
+    "quote": {
+      "text": "He kept shooting after I thought we were finished, and those are the ones we framed.",
+      "by": "Tomas V., Uxbridge"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

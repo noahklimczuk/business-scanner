@@ -1,0 +1,117 @@
+{
+  "version": 2,
+  "template": "trade",
+  "lead": {
+    "place_id": "demo-trade-halstead",
+    "name": "Halstead Roofing",
+    "category": "Roofing contractor",
+    "address": "118 Prospect St, Newmarket, ON L3Y 3S6, Canada",
+    "phone": "(905) 555-0142",
+    "phone_e164": "+19055550142",
+    "lat": 44.0561,
+    "lng": -79.4627,
+    "hours": [
+      "Monday: 7:00 AM – 5:00 PM",
+      "Tuesday: 7:00 AM – 5:00 PM",
+      "Wednesday: 7:00 AM – 5:00 PM",
+      "Thursday: 7:00 AM – 5:00 PM",
+      "Friday: 7:00 AM – 4:00 PM",
+      "Saturday: 8:00 AM – 1:00 PM",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Roofing",
+    "hero_headline": "A roof that stops the rain, and stays stopped",
+    "hero_sub": "Tear-offs, leak repairs and flat roofing across York Region.",
+    "about": [
+      "We reroof houses in Newmarket and the towns around it. Most of the work is asphalt shingle on pitched roofs, with flat sections done in modified bitumen where the slope runs out.",
+      "A job starts with somebody getting on the roof and looking at it. You get told what is wrong, what it takes to fix, and what it costs, in that order, before anything is torn off."
+    ],
+    "services_intro": "Five things make up most of what we do in a year.",
+    "services": [
+      {
+        "name": "Full roof replacement",
+        "description": "Tear off to the deck, replace what is rotten, and shingle it back up."
+      },
+      {
+        "name": "Leak tracing and repair",
+        "description": "Finding where the water actually gets in, which is rarely where it drips."
+      },
+      {
+        "name": "Flat and low-slope roofing",
+        "description": "Modified bitumen on additions, garages and dormers."
+      },
+      {
+        "name": "Eavestrough and fascia",
+        "description": "New troughs, downspouts and the boards behind them."
+      },
+      {
+        "name": "Skylights and vents",
+        "description": "Flashing kits, curbs and roof vents fitted and sealed."
+      },
+      {
+        "name": "Storm and emergency cover",
+        "description": "Tarping and boarding after wind damage until a proper repair can be done."
+      }
+    ],
+    "process_headline": "What happens after you call",
+    "process": [
+      {
+        "name": "You ring",
+        "description": "Tell us what you are seeing and where it is."
+      },
+      {
+        "name": "We look",
+        "description": "Somebody comes out and gets on the roof properly."
+      },
+      {
+        "name": "You get it in writing",
+        "description": "Scope, materials and the number, on paper."
+      },
+      {
+        "name": "We do the work",
+        "description": "The site gets swept and the nails picked up before we leave."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Which areas do you work in?",
+        "a": "Newmarket and the towns around it. If you are not sure, ring and ask — it is a short conversation."
+      },
+      {
+        "q": "When can I reach someone?",
+        "a": "Weekdays from seven in the morning until five, and Saturday mornings."
+      },
+      {
+        "q": "Do you look at the roof before quoting?",
+        "a": "Always. A number given from the driveway is a guess, and guesses go wrong on roofs."
+      },
+      {
+        "q": "What do you do about the mess?",
+        "a": "A tear-off makes a mess. Sweeping it up is part of the job, not an extra."
+      }
+    ],
+    "why_us": [
+      "We answer the phone",
+      "Written scope before anything is torn off",
+      "The yard gets swept before we leave"
+    ],
+    "cta_line": "Tell us what the roof is doing",
+    "closing_note": "If it is actively coming in, say so when you ring and we will move you up the list.",
+    "meta_title": "Halstead Roofing — Roofing in Newmarket",
+    "meta_description": "Roof replacement, leak repair and flat roofing in Newmarket and across York Region.",
+    "service_areas": [
+      "Newmarket",
+      "Aurora",
+      "Bradford",
+      "Keswick",
+      "East Gwillimbury"
+    ],
+    "quote": {
+      "text": "They found the leak in twenty minutes after two other roofers told me the whole roof had to come off.",
+      "by": "Dana R., Newmarket"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

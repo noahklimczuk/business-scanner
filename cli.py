@@ -15,6 +15,7 @@ import billing as billing_mod
 import board as board_mod
 import config
 import db
+import demo as demo_mod
 import deploy
 import enrich as enrich_mod
 import generate as generate_mod
@@ -24,6 +25,7 @@ import pitch
 import prospect
 import qr as qr_mod
 import search
+import stock
 
 app = typer.Typer(add_completion=False, no_args_is_help=True,
                   help="Find businesses with no website, score them, and work the pipeline.")
@@ -270,6 +272,10 @@ def build(
                                                 f"{', '.join(generate_mod.TEMPLATES)}"),
     launch: bool = typer.Option(False, "--launch",
                                 help="Drop the noindex. Only after they have said yes."),
+    demo: bool = typer.Option(False, "--demo",
+                              help="Build the richer demo version: stock photos "
+                                   "in every slot and a ribbon saying it is a "
+                                   "sample. Same copy, same rules."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the spend confirmation."),
 ) -> None:
     """Build the website for one lead into sites/<place_id>/.
@@ -350,11 +356,28 @@ def build(
             cache_read_tokens=usage.cache_read_tokens, cost=usage.cost)
         con.commit()
 
+    # A demo fills every slot it can with licensed stock. Best-effort by
+    # design: no key or no signal falls through to the generated artwork and
+    # says so, because a demo you cannot build in a car park is no use.
+    stock_note = ""
+    if demo and not photos:
+        with console.status("fetching photographs…"):
+            result = stock.fetch(chosen,
+                                 generate_mod.PHOTO_SLOTS.get(chosen, 6),
+                                 generate_mod.site_dir(place_id),
+                                 cfg.get("stock"), seed=place_id)
+        photos, stock_note = result.as_content(), result.note
+
+    if demo and launch:
+        _fail("A demo is a sample, so it is never launched. Build it without "
+              "--demo when they have said yes.")
+        return
+
     try:
         site = generate_mod.render(
             lead, {**content, "verified_facts": verified, "photos": photos},
             template=chosen, preview=not launch, operator=cfg["business"],
-            city_hint=cfg["business"].get("home_city", ""))
+            city_hint=cfg["business"].get("home_city", ""), demo=demo)
     except generate_mod.ContentError as exc:
         _fail(str(exc))
         return
@@ -368,12 +391,13 @@ def build(
     t.add_column(style="dim")
     t.add_column()
     t.add_row("business", lead["name"])
-    t.add_row("template", chosen)
+    t.add_row("template", f"{chosen}{'  [magenta]demo[/magenta]' if demo else ''}")
     t.add_row("accent", f"[bold]{site.palette['accent']}[/bold] "
                         f"[dim]hue {site.palette['hue']}[/dim]")
-    over = size > generate_mod.PAGE_BUDGET_BYTES
+    budget = site.budget
+    over = size > budget
     weight = (f"[red]{size / 1024:.0f} KB — over the "
-              f"{generate_mod.PAGE_BUDGET_BYTES // 1024} KB budget[/red]"
+              f"{budget // 1024} KB budget[/red]"
               if over else f"[dim]{size / 1024:.1f} KB[/dim]")
     t.add_row("page", f"{paths['index.html']}  {weight}")
     t.add_row("indexing", "[yellow]noindex + robots disallow[/yellow]" if not launch
@@ -384,15 +408,20 @@ def build(
                           f"{usage.output_tokens:,} output tokens[/dim]")
     else:
         t.add_row("copy", "[dim]reused from content.json — free[/dim]")
+    if demo:
+        t.add_row("photos", f"{len(photos)} licensed" if photos
+                            else "[dim]generated artwork[/dim]")
     t.add_row("last 30 days", f"${db.generation_spend(con, 30):,.2f} on copy")
     console.print(Panel(t, title="site built",
                         border_style="yellow" if over else "green", expand=False))
 
+    if stock_note:
+        console.print(f"[dim]{stock_note}[/dim]")
     if over:
         biggest = ", ".join(f"{n} {s / 1024:.0f}KB" for n, s in heaviest[:3])
         console.print(
             f"[yellow]![/yellow] This page is {size / 1024:.0f} KB. The target is "
-            f"under {generate_mod.PAGE_BUDGET_BYTES // 1024} KB on rural LTE, and "
+            f"under {budget // 1024} KB on rural LTE, and "
             f"the weight is in: {biggest}.\n  Resize the photos to about 1600px "
             f"wide and re-run build — nothing else in the page comes close.")
     console.print(f"\n  open it: [bold]{paths['index.html']}[/bold]")
@@ -400,6 +429,85 @@ def build(
                   f"{os.path.join(generate_mod.site_dir(place_id), 'content.json')}"
                   "[/bold], then run build again")
     con.close()
+
+
+# ---------------------------------------------------------------------------
+@app.command()
+def demo(
+    template: Optional[str] = typer.Argument(
+        None, help="One template, or leave it out to build all of them."),
+    no_photos: bool = typer.Option(False, "--no-photos",
+                                   help="Skip the photo fetch and use generated "
+                                        "artwork everywhere."),
+    open_after: bool = typer.Option(False, "--open",
+                                    help="Open the gallery when it is done."),
+) -> None:
+    """Build the portfolio: one finished sample site per kind of business.
+
+    The businesses are invented, so this costs nothing, needs no API key and
+    can be run before you leave the house. It is the thing you open first —
+    the prospect's own preview is what closes, but this is what starts the
+    conversation.
+    """
+    try:
+        cfg = config.load()
+    except config.ConfigError as exc:
+        _fail(str(exc))
+        return
+
+    names = demo_mod.available()
+    if template:
+        if template not in names:
+            _fail(f"There is no demo business for '{template}'.\n"
+                  f"Written so far: {', '.join(names)}.")
+            return
+        names = [template]
+
+    if not no_photos and not stock.configured(cfg):
+        console.print(
+            "[dim]No photo service key, so these build with generated artwork. "
+            "A free Pexels key in config.json under \"stock\" turns on "
+            "photographs.[/dim]")
+
+    built = []
+    with Progress(TextColumn("[progress.description]{task.description}"),
+                  BarColumn(), TimeElapsedColumn(), console=console) as progress:
+        task = progress.add_task("building", total=len(names))
+        for name in names:
+            progress.update(task, description=f"building {name}")
+            try:
+                built.append(demo_mod.build(
+                    name, photos=not no_photos, stock_settings=cfg.get("stock"),
+                    operator=cfg["business"]))
+            except (demo_mod.DemoError, generate_mod.ContentError) as exc:
+                _fail(str(exc))
+                return
+            progress.advance(task)
+
+    index = demo_mod.gallery(built, cfg["business"])
+
+    t = Table(box=None, pad_edge=False)
+    t.add_column("template", style="dim")
+    t.add_column("business")
+    t.add_column("accent")
+    t.add_column("photos", justify="right")
+    t.add_column("size", justify="right")
+    for site in built:
+        t.add_row(site.template, site.name,
+                  f"[bold]{site.accent}[/bold]",
+                  str(site.photos) if site.photos else "[dim]drawn[/dim]",
+                  f"{site.bytes / 1024:.0f} KB")
+    console.print(Panel(t, title=f"{len(built)} sample site{'' if len(built) == 1 else 's'}",
+                        border_style="green", expand=False))
+
+    notes = {site.note for site in built if site.note}
+    for note in sorted(notes):
+        console.print(f"[dim]{note}[/dim]")
+    console.print(f"\n  open the gallery: [bold]{index}[/bold]")
+    if open_after:
+        import webbrowser
+
+        webbrowser.open(f"file://{os.path.abspath(index)}")
 
 
 # ---------------------------------------------------------------------------

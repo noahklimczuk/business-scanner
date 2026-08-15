@@ -1,0 +1,33 @@
+{# The floor. Oversized rounded type, a gradient first screen, and the week
+   itself given a section, because for a studio the timetable is the product.
+
+   Image slots: 0 hero · 1-3 why · 4 about. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_surge(fallback='Studio', label='Call to start', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_tiles(title='What we run', eyebrow='Classes and sessions') }}
+{{ blocks.timetable(heading='The week', title='When we are open') }}
+{{ blocks.process_steps(heading='Starting out', sunk=True) }}
+{{ blocks.why_grid(art=True, first=1, heading='Why train here') }}
+{{ blocks.about_centre(night=True) }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list(sunk=False) }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Come in', title='Where to find us') }}
+{% endblock %}
+
+{% block extra_css %}
+/* The one place a gradient is allowed to be the background rather than the
+   art: the first screen, where it does the work a photograph would. */
+.hero.on-night {
+  background:
+    radial-gradient(90% 70% at 12% 0%, color-mix(in srgb, var(--accent) 40%, transparent) 0%, transparent 60%),
+    radial-gradient(80% 60% at 92% 10%, color-mix(in srgb, var(--accent-far) 26%, transparent) 0%, transparent 62%),
+    var(--night);
+}
+{% endblock %}

@@ -39,11 +39,16 @@ leadsmith-app = "leadsmith_app:main"
 
 [tool.setuptools]
 include-package-data = true
-py-modules = ["billing", "board", "cli", "config", "db", "deploy", "design",
-              "enrich", "generate", "hours", "invoice", "leadsmith_app",
-              "offboard", "pitch", "prospect", "qr", "search", "startup",
-              "update", "version", "visuals"]
+py-modules = ["billing", "board", "cli", "config", "db", "demo", "deploy",
+              "design", "enrich", "generate", "hours", "invoice",
+              "leadsmith_app", "offboard", "pitch", "prospect", "qr", "search",
+              "startup", "stock", "update", "version", "visuals"]
 packages = ["gui", "gui.pages"]
+
+# The twelve sample businesses `leadsmith demo` builds from. Data, not code,
+# and shipped so the portfolio works out of an installed copy.
+[tool.setuptools.package-data]
+"*" = ["templates/**/*", "demo/fixtures/*.json"]
 
 [tool.setuptools.dynamic]
 version = {attr = "version.VERSION"}

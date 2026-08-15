@@ -1,0 +1,30 @@
+{# The garage. Dark, square-cornered, monospaced numbers, and a ticker of the
+   work running under the first screen like a board on a workshop wall.
+
+   Image slots: 0 hero · 1 services · 2 about · 3-6 the bays. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_dash(fallback='Garage', label='Call the shop', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_ticket(title='On the ramp', eyebrow='What we take in', slot=1) }}
+{{ blocks.process_steps(heading='Booking it in', sunk=True) }}
+{{ blocks.why_grid(art=False, klass='tiles', heading='Why bring it here') }}
+{{ blocks.about_split(night=False, flip=True, slot=2) }}
+{{ blocks.gallery_rail(count=4, first=3, heading='The shop', title='In the bays') }}
+{{ blocks.quote_band(night=True) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band(night=True, wash=False) }}
+{{ blocks.contact_block(night=True, eyebrow='The shop', title='Where the shop is') }}
+{% endblock %}
+
+{% block extra_css %}
+/* Numbers are data here, so they are set in the detail face and they line up
+   in a column — a docket, not a poster. */
+.index-num, .stat-value, .slot-time, .plate-number { font-family: var(--font-detail); font-variant-numeric: tabular-nums; }
+.index-row { border-top-style: dashed; }
+.index-row:last-child { border-bottom-style: dashed; }
+{% endblock %}

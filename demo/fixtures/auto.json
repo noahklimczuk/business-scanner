@@ -1,0 +1,116 @@
+{
+  "version": 2,
+  "template": "auto",
+  "lead": {
+    "place_id": "demo-auto-kessler",
+    "name": "Kessler Automotive",
+    "category": "Auto repair shop",
+    "address": "880 Mulock Dr, Newmarket, ON L3Y 9C1, Canada",
+    "phone": "(905) 555-0164",
+    "phone_e164": "+19055550164",
+    "lat": 44.0698,
+    "lng": -79.4791,
+    "hours": [
+      "Monday: 8:00 AM – 6:00 PM",
+      "Tuesday: 8:00 AM – 6:00 PM",
+      "Wednesday: 8:00 AM – 6:00 PM",
+      "Thursday: 8:00 AM – 6:00 PM",
+      "Friday: 8:00 AM – 5:00 PM",
+      "Saturday: 9:00 AM – 2:00 PM",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Independent garage",
+    "hero_headline": "The shop that tells you what it actually needs",
+    "hero_sub": "Diagnostics, repairs and safeties on Mulock Drive.",
+    "about": [
+      "Three bays, a hoist in each, and the same two people who will be here next year. We work on most makes, petrol and diesel, and we will say so plainly when a job is better done by a dealer.",
+      "Nothing gets replaced without a phone call first. If the estimate changes once the wheel is off, you hear about it before the part is ordered, not on the invoice."
+    ],
+    "services_intro": "What comes through the door in a normal week.",
+    "services": [
+      {
+        "name": "Diagnostics",
+        "description": "Reading the fault properly rather than replacing the first part it points at."
+      },
+      {
+        "name": "Brakes and suspension",
+        "description": "Pads, rotors, shocks, bushings and the noises that come with them."
+      },
+      {
+        "name": "Maintenance and oil",
+        "description": "Fluids, filters, belts and the schedule your car actually has."
+      },
+      {
+        "name": "Tyres and alignment",
+        "description": "Seasonal changeovers, balancing and four-wheel alignment."
+      },
+      {
+        "name": "Safety inspections",
+        "description": "For a sale, a transfer, or your own peace of mind."
+      },
+      {
+        "name": "Exhaust and cooling",
+        "description": "Leaks, rust, rads, hoses and thermostats."
+      }
+    ],
+    "process_headline": "Booking it in",
+    "process": [
+      {
+        "name": "Ring the shop",
+        "description": "Describe the noise. Nobody minds a bad impression of it."
+      },
+      {
+        "name": "Leave it with us",
+        "description": "We look before we quote, and we quote before we start."
+      },
+      {
+        "name": "You approve the work",
+        "description": "Item by item, with what can wait separated from what cannot."
+      },
+      {
+        "name": "You pick it up",
+        "description": "With the old parts, if you want to see them."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Do you work on my make?",
+        "a": "Most makes, petrol and diesel. Ring with the year and model and we will tell you straight."
+      },
+      {
+        "q": "When are you open?",
+        "a": "Weekdays from eight, and Saturday mornings until two."
+      },
+      {
+        "q": "Will you call before doing extra work?",
+        "a": "Every time. Nothing gets replaced that you have not agreed to first."
+      },
+      {
+        "q": "Can I wait while it is done?",
+        "a": "For short jobs, yes. There is a seat, a kettle and a view of the bays."
+      }
+    ],
+    "why_us": [
+      "Three bays, two people, no rotating staff",
+      "Every extra is a phone call first",
+      "The old parts come back with the car"
+    ],
+    "cta_line": "Ring the shop and describe the noise",
+    "closing_note": "Drop-off is from eight; the key box is beside the office door if you are earlier.",
+    "meta_title": "Kessler Automotive — Auto repair in Newmarket",
+    "meta_description": "Diagnostics, brakes, tyres and safety inspections at an independent garage in Newmarket.",
+    "service_areas": [
+      "Newmarket",
+      "Aurora",
+      "East Gwillimbury",
+      "Holland Landing"
+    ],
+    "quote": {
+      "text": "They talked me out of a repair I had already agreed to pay for.",
+      "by": "Owen T., Newmarket"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}
