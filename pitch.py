@@ -114,6 +114,7 @@ def build(lead: dict[str, Any], content: dict[str, Any], *,
     """The leave-behind for one lead, as a self-contained HTML page."""
     template = template or generate.template_for(lead.get("category"))
     palette = design.palette_for(lead["place_id"], template)
+    today = datetime.date.today()
 
     code = ""
     if preview_url:
@@ -137,7 +138,11 @@ def build(lead: dict[str, Any], content: dict[str, Any], *,
         phone_display=lead.get("phone") or "",
         operator=operator or {},
         price=pricing_from({"pricing": pricing} if pricing else None),
-        today=datetime.date.today().strftime("%-d %B %Y"),
+        # Interpolated, not strftime("%-d %B %Y"). The leading-zero-dropping
+        # %-d is a glibc extension: it raises ValueError on Windows, which is
+        # the only platform the packaged app runs on, and that spelling took
+        # the whole leave-behind out there. See test_dates_are_formatted_portably.
+        today=f"{today.day} {today:%B %Y}",
     )
 
 

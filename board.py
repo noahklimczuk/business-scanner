@@ -172,6 +172,12 @@ def stale_previews(con, days: int = 30) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def _stamp(when: datetime.datetime) -> str:
+    """"Friday 14 August 2026, 9:05PM" — without a glibc-only directive."""
+    return (f"{when:%A} {when.day} {when:%B %Y}, "
+            f"{when.hour % 12 or 12}:{when:%M}{when:%p}")
+
+
 def build(con, *, operator: Optional[dict[str, Any]] = None) -> str:
     subs = db.subscriptions(con)
     money = billing.summarise(subs)
@@ -181,7 +187,10 @@ def build(con, *, operator: Optional[dict[str, Any]] = None) -> str:
     import invoice as invoice_mod
 
     return env().get_template("board.html").render(
-        generated=datetime.datetime.now().strftime("%A %-d %B %Y, %-I:%M%p"),
+        # Assembled rather than strftime("%A %-d %B %Y, %-I:%M%p"): both %-d
+        # and %-I are glibc extensions and raise ValueError on Windows, which
+        # is where the packaged app runs — the board would not build at all.
+        generated=_stamp(datetime.datetime.now()),
         # Money asked for but not yet arrived. On the same page as MRR because
         # the two answer different questions and the second one is the one that
         # goes quiet — nothing else in the tool would ever mention an invoice

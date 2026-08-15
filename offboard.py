@@ -77,6 +77,11 @@ Prepared {today} by {operator}.{contact}
 """
 
 
+def _long_date(day: datetime.date) -> str:
+    """"14 August 2026", on Windows as well. See the note where it is used."""
+    return f"{day.day} {day:%B %Y}"
+
+
 def handover_note(lead: dict[str, Any], operator: Optional[dict[str, Any]] = None
                   ) -> str:
     operator = operator or {}
@@ -105,7 +110,10 @@ def handover_note(lead: dict[str, Any], operator: Optional[dict[str, Any]] = Non
             if form else
             "This site had no contact form. The phone number on the page is\n"
             "the only way people were asked to get in touch."),
-        today=datetime.date.today().strftime("%-d %B %Y"),
+        # Interpolated rather than strftime("%-d %B %Y") — that %-d is a glibc
+        # extension and raises ValueError on Windows, which would fail the
+        # export on the day a client asked to leave.
+        today=_long_date(datetime.date.today()),
         operator=operator.get("legal_name") or operator.get("operator_name")
                  or "Leadsmith",
         contact=contact,
