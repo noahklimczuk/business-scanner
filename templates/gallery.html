@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en-CA">
+{# The index the operator opens on the iPad. Not built on the site stylesheet
+   on purpose: it is our page rather than a client's, so it does not need the
+   token system, the call bar or any of the machinery those pages carry — and
+   keeping it separate means a change to a client template can never quietly
+   change what the portfolio looks like. #}
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sample sites{% if operator.name %} — {{ operator.name }}{% endif %}</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="{{ palette.night }}">
+<style>
+:root {
+  --accent: {{ palette.accent_bright }};
+  --night: {{ palette.night }};
+  --sunk: {{ palette.night_sunk }};
+  --ink: {{ palette.night_ink }};
+  --muted: {{ palette.night_muted }};
+  --line: {{ palette.night_hairline }};
+  --font: {{ style.font_body }};
+  --display: {{ style.font_display }};
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--night); color: var(--ink);
+  font-family: var(--font); line-height: 1.5; letter-spacing: -.011em;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+.shell { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 clamp(1.25rem, 5vw, 2.5rem); }
+header { padding: clamp(3.5rem, 9vw, 7rem) 0 clamp(2rem, 5vw, 3.5rem); }
+h1 {
+  font-family: var(--display); font-weight: 500; margin: 0;
+  font-size: clamp(min(2.5rem, 10vw), 6vw, 4rem); line-height: 1.05;
+  letter-spacing: -.03em;
+}
+.eyebrow {
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .24em;
+  color: var(--accent); margin: 0 0 1.2rem;
+}
+.lede { color: var(--muted); max-width: 56ch; margin: 1.5rem 0 0; font-size: 1.1rem; }
+.grid {
+  display: grid; gap: 1.25rem; list-style: none; padding: 0; margin: 0 0 5rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+}
+.card {
+  display: flex; flex-direction: column; gap: .55rem; height: 100%;
+  border: 1px solid var(--line); background: var(--sunk);
+  padding: 1.6rem 1.5rem 1.5rem; text-decoration: none;
+  transition: transform .25s ease, border-color .25s ease, background .25s ease;
+}
+.card:hover { transform: translateY(-4px); border-color: var(--swatch, var(--accent)); }
+.card:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.swatch { width: 2.25rem; height: .35rem; border-radius: 99px; background: var(--swatch); }
+.kind {
+  font-size: .74rem; text-transform: uppercase; letter-spacing: .18em;
+  color: var(--muted); margin: .5rem 0 0;
+}
+.name { font-family: var(--display); font-size: 1.5rem; font-weight: 500; letter-spacing: -.02em; margin: 0; }
+.what { color: var(--muted); font-size: .92rem; margin: 0; }
+.meta { margin-top: auto; padding-top: 1.1rem; color: var(--muted); font-size: .78rem;
+        display: flex; flex-wrap: wrap; gap: .35rem .9rem; }
+footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--muted); font-size: .8rem; }
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+@media print { body { background: #fff; color: #000; } .card { background: #fff; border-color: #999; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="shell">
+    <p class="eyebrow">Sample sites</p>
+    <h1>{{ total }} finished websites,<br>one for every kind of shop.</h1>
+    <p class="lede">Every one of these is a complete, working page — the same
+      builder that makes a client's site made all of them. The businesses are
+      invented, and so is the photography. Yours would have your own.</p>
+  </div>
+</header>
+
+<main class="shell">
+  <ul class="grid" role="list">
+    {% for site in built %}
+    <li>
+      <a class="card" href="{{ site.href }}" style="--swatch:{{ site.accent }}">
+        <span class="swatch" aria-hidden="true"></span>
+        <p class="kind">{{ site.template }}</p>
+        <h2 class="name">{{ site.name }}</h2>
+        <p class="what">{{ site.category }}</p>
+        {% if site.services %}
+        <p class="what">{{ site.services|join(' · ') }}</p>
+        {% endif %}
+        <span class="meta">
+          <span>{{ '%.0f'|format(site.bytes / 1024) }} KB</span>
+          <span>{{ site.photos }} photo{{ '' if site.photos == 1 else 's' }}</span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</main>
+
+<footer>
+  <div class="shell">
+    <p>Built with Leadsmith{% if operator.name %} by {{ operator.name }}{% endif %}.
+       {{ year }}. Sample businesses, sample copy, licensed or generated imagery.
+       Nothing here is indexed.</p>
+  </div>
+</footer>
+</body>
+</html>

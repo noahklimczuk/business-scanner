@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "template": "professional",
+  "lead": {
+    "place_id": "demo-professional-ottway",
+    "name": "Ottway & Finch",
+    "category": "Law firm",
+    "address": "16 Main St S, Newmarket, ON L3Y 3Y1, Canada",
+    "phone": "(905) 555-0155",
+    "phone_e164": "+19055550155",
+    "lat": 44.0524,
+    "lng": -79.4614,
+    "hours": [
+      "Monday: 9:00 AM – 5:00 PM",
+      "Tuesday: 9:00 AM – 5:00 PM",
+      "Wednesday: 9:00 AM – 5:00 PM",
+      "Thursday: 9:00 AM – 5:00 PM",
+      "Friday: 9:00 AM – 4:00 PM",
+      "Saturday: Closed",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Law practice",
+    "hero_headline": "Plain answers, before the meter starts",
+    "hero_sub": "Real estate, wills and small business law on Main Street.",
+    "about": [
+      "A small practice on Main Street South. Most of the work is property, estates and the paperwork that keeps a small business out of trouble.",
+      "The first conversation is about whether you need a lawyer at all. Sometimes the answer is no, and hearing that early is worth more than a file being opened."
+    ],
+    "services_intro": "The five areas most of our work falls into.",
+    "services": [
+      {
+        "name": "Residential real estate",
+        "description": "Purchases, sales, refinancing and title work."
+      },
+      {
+        "name": "Wills and estates",
+        "description": "Drafting wills and powers of attorney, and administering estates."
+      },
+      {
+        "name": "Small business",
+        "description": "Incorporations, shareholder agreements and commercial leases."
+      },
+      {
+        "name": "Contract review",
+        "description": "Reading what you are about to sign, before you sign it."
+      },
+      {
+        "name": "Notarial services",
+        "description": "Commissioning affidavits and certifying copies."
+      }
+    ],
+    "process_headline": "Working together",
+    "process": [
+      {
+        "name": "A first conversation",
+        "description": "What the matter is, and whether it needs a lawyer."
+      },
+      {
+        "name": "Scope and terms in writing",
+        "description": "What will be done and how it is charged, before anything starts."
+      },
+      {
+        "name": "The work",
+        "description": "With you told what is happening rather than left to wonder."
+      },
+      {
+        "name": "Closing the file",
+        "description": "Documents to you, and a plain summary of what was done."
+      }
+    ],
+    "faq": [
+      {
+        "q": "What are your office hours?",
+        "a": "Weekdays from nine, closing at five, and at four on Fridays."
+      },
+      {
+        "q": "Do you handle matters outside these areas?",
+        "a": "Ring and ask. Where we are not the right people, we will say so and point you on."
+      },
+      {
+        "q": "How is the first conversation charged?",
+        "a": "You are told how a matter will be charged before any work begins on it."
+      },
+      {
+        "q": "Where is the office?",
+        "a": "Main Street South in Newmarket, above the shopfront, with entry from the side door."
+      }
+    ],
+    "why_us": [
+      "A small practice, so you know who has your file",
+      "Scope and terms in writing before work starts",
+      "Told plainly when you do not need us"
+    ],
+    "cta_line": "Ring the office and describe the matter",
+    "closing_note": "Bring any paperwork you already have — even the pages you think are irrelevant.",
+    "meta_title": "Ottway & Finch — Law firm in Newmarket",
+    "meta_description": "Real estate, wills, estates and small business law on Main Street, Newmarket.",
+    "service_areas": [
+      "Newmarket",
+      "Aurora",
+      "Bradford",
+      "East Gwillimbury"
+    ],
+    "quote": {
+      "text": "Told me in the first ten minutes that I did not need them. I have used them twice since.",
+      "by": "Ruth A., Newmarket"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

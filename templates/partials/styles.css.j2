@@ -8,7 +8,7 @@
    than a blank one.
 
    Ontario's AODA requires WCAG 2.0 Level AA of these businesses' websites, so
-   the accessible behaviour here is load-bearing, not polish. Two structural
+   the accessible behaviour here is load-bearing, not polish. Three structural
    decisions carry most of it:
 
    `.on-night` re-points the colour tokens rather than restating colours. A
@@ -20,8 +20,12 @@
    failure is silent.
 
    Every token pair is enumerated in design.audit() and asserted against 4.5:1
-   across every hue. A colour that renders on the page and is not in that list
-   is untested, so new colours go there too. */
+   across every hue of every template. A colour that renders on the page and is
+   not in that list is untested, so new colours go there too.
+
+   Every animation in the file lives inside one `prefers-reduced-motion` block,
+   which is also what lets the print rules switch the whole lot off with three
+   selectors instead of thirty. */
 :root {
   --accent: {{ palette.accent }};
   --accent-ink: {{ palette.accent_ink }};
@@ -30,6 +34,7 @@
   --accent-edge: {{ palette.accent_edge }};
   --accent-glow: {{ palette.accent_glow }};
   --accent-glow-alt: {{ palette.accent_glow_alt }};
+  --accent-far: {{ palette.accent_far }};
   --accent-fg: {{ palette.accent_fg }};
   --surface: {{ palette.surface }};
   --sunk: {{ palette.surface_sunk }};
@@ -51,19 +56,34 @@
   --night-hairline: {{ palette.night_hairline }};
   --night-edge: {{ palette.night_edge }};
 
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
-          system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Type. No webfont anywhere on the page: a font file is a second round trip
+     on rural LTE, and personality comes from the system families instead —
+     see design.FONTS. */
+  --font: {{ style.font_body }};
+  --font-display: {{ style.font_display }};
+  --font-detail: {{ style.font_detail }};
+  --display-weight: {{ style.display_weight }};
+  --display-tracking: {{ style.display_tracking }};
+  --display-case: {{ style.display_case }};
+  --display-scale: {{ style.display_scale }};
+  --eyebrow-case: {{ style.eyebrow_case }};
+  --eyebrow-tracking: {{ style.eyebrow_tracking }};
+  --eyebrow-weight: {{ style.eyebrow_weight }};
 
-  /* Apple's corner radii are large and consistent; the templates differ only
-     in how large. */
-  --r-card: {% if template_name == 'salon' %}28px{% elif template_name == 'food' %}18px{% else %}20px{% endif %};
-  --r-panel: {% if template_name == 'salon' %}34px{% else %}26px{% endif %};
-  --r-pill: 980px;
+  --r-card: {{ style.r_card }};
+  --r-panel: {{ style.r_panel }};
+  --r-pill: {{ style.r_pill }};
+  --r-button: {{ style.r_button }};
 
   --gutter: clamp(1.25rem, 5vw, 2.5rem);
   --shell: 1080px;
   --wide: 1400px;
-  --section: clamp(4.5rem, 11vw, 9rem);
+  --section: calc(clamp(4.25rem, 10vw, 8.5rem) * {{ style.rhythm }});
+
+  /* Which keyframe a reveal plays. One page, one motion character; the
+     templates differ here rather than each inventing its own animation. */
+  --reveal: {{ style.motion }};
+  --reveal-range: entry 4% cover 28%;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -90,8 +110,8 @@ body {
   color: var(--ink);
   font-family: var(--font);
   font-size: 1.0625rem;
-  line-height: 1.47;
-  letter-spacing: -.012em;
+  line-height: 1.5;
+  letter-spacing: -.011em;
   -webkit-font-smoothing: antialiased;
   /* `clip`, not `hidden`: overflow-x:hidden turns this into a scroll
      container and Safari then refuses to make any descendant sticky — which
@@ -99,7 +119,7 @@ body {
   overflow-x: clip;
 }
 img { max-width: 100%; height: auto; display: block; }
-h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
 p { margin: 0 0 1rem; }
 p:last-child { margin-bottom: 0; }
 /* 1.4.1: colour is never the only thing marking a link. Underlined by default;
@@ -109,6 +129,7 @@ a { color: var(--accent-ink); text-decoration-thickness: max(1px, .06em); text-u
 
 .shell { width: 100%; max-width: var(--shell); margin: 0 auto; padding: 0 var(--gutter); }
 .shell-wide { width: 100%; max-width: var(--wide); margin: 0 auto; padding: 0 var(--gutter); }
+.shell-narrow { width: 100%; max-width: 780px; margin: 0 auto; padding: 0 var(--gutter); }
 
 /* Screen-reader-only text. Not `display: none` — that would hide it from the
    screen reader too, which is the entire point of the class. */
@@ -123,8 +144,8 @@ a { color: var(--accent-ink); text-decoration-thickness: max(1px, .06em); text-u
 .skip:focus { left: 0; }
 
 /* 2.4.7. The ring is a token so a dark section can re-point it — an ink-dark
-   outline on a true-black background is not a focus indicator, it is nothing.
-   The white companion ring keeps it visible over the accent-filled buttons as
+   outline on a near-black background is not a focus indicator, it is nothing.
+   The pale companion ring keeps it visible over the accent-filled buttons as
    well, where a single dark ring can disappear into the fill. */
 :focus-visible {
   outline: 3px solid var(--focus);
@@ -154,56 +175,74 @@ main:focus, main:focus-visible { outline: none; box-shadow: none; }
 
    `overflow-wrap` is the net under that: a long enough word — a compound
    surname, a town like Nobleton-Schomberg — breaks rather than disappears. */
-h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word; }
+h1, h2, h3, h4, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word; }
 .display {
-  font-size: clamp(min(2.75rem, 11vw), 8.5vw, 6rem);
-  font-weight: 700; line-height: 1.03; letter-spacing: -.035em;
+  font-family: var(--font-display);
+  /* Sized for the column it usually sits in, which is half the page. A hero
+     that gives the headline the whole width asks for the larger step below —
+     the other way round produced a five-line headline in a 600px column. */
+  font-size: calc(clamp(min(2.3rem, 9.5vw), 5vw, 4.1rem) * var(--display-scale));
+  font-weight: var(--display-weight); line-height: 1.02;
+  letter-spacing: var(--display-tracking); text-transform: var(--display-case);
+}
+.hero .centre .display, .hero-copy.centre .display {
+  font-size: calc(clamp(min(2.6rem, 10.5vw), 7vw, 5.4rem) * var(--display-scale));
 }
 .headline {
-  font-size: clamp(min(2rem, 9vw), 5vw, 3.5rem);
-  font-weight: 650; line-height: 1.08; letter-spacing: -.028em;
+  font-family: var(--font-display);
+  font-size: calc(clamp(min(1.95rem, 8.5vw), 4.6vw, 3.3rem) * var(--display-scale));
+  font-weight: var(--display-weight); line-height: 1.08;
+  letter-spacing: var(--display-tracking);
 }
 .subhead {
-  font-size: clamp(min(1.35rem, 7vw), 2.6vw, 1.9rem);
-  font-weight: 600; line-height: 1.15; letter-spacing: -.022em;
+  font-family: var(--font-display);
+  font-size: clamp(min(1.3rem, 6.5vw), 2.4vw, 1.8rem);
+  font-weight: 600; line-height: 1.16; letter-spacing: -.022em;
 }
 .lede {
-  font-size: clamp(1.1rem, 1.8vw, 1.3rem);
-  line-height: 1.42; color: var(--muted); letter-spacing: -.014em;
+  font-size: clamp(1.1rem, 1.8vw, 1.28rem);
+  line-height: 1.45; color: var(--muted); letter-spacing: -.012em;
 }
 .eyebrow {
-  font-size: .95rem; font-weight: 600; letter-spacing: -.005em;
-  color: var(--accent-ink); margin: 0 0 .75rem;
+  font-family: var(--font-detail);
+  font-size: .82rem; font-weight: var(--eyebrow-weight);
+  letter-spacing: var(--eyebrow-tracking); text-transform: var(--eyebrow-case);
+  color: var(--accent-ink); margin: 0 0 .9rem;
 }
-.fine { font-size: .78rem; line-height: 1.4; color: var(--muted); letter-spacing: 0; }
+.fine { font-size: .78rem; line-height: 1.45; color: var(--muted); letter-spacing: 0; }
 .measure { max-width: 34ch; }
-.measure-wide { max-width: 52ch; }
+.measure-wide { max-width: 54ch; }
 .centre { text-align: center; }
 .centre .measure, .centre .measure-wide { margin-left: auto; margin-right: auto; }
+.mt { margin-top: 1.5rem; }
+.mt-l { margin-top: 2.75rem; }
 
 /* ---------- controls ---------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
-  font: inherit; font-weight: 500; text-decoration: none; text-align: center;
-  padding: .82rem 1.45rem; border-radius: var(--r-pill);
-  border: 1px solid transparent; transition: transform .2s ease, opacity .2s ease, background .2s ease;
+  font: inherit; font-weight: 550; text-decoration: none; text-align: center;
+  padding: .86rem 1.5rem; border-radius: var(--r-button);
+  border: 1px solid transparent;
+  transition: transform .2s ease, opacity .2s ease, background .2s ease, box-shadow .2s ease;
 }
-.btn-primary { background: var(--accent); color: var(--accent-fg); }
-/* Filled rather than outlined. Its only use is the mobile call bar, which is
-   translucent — a transparent button would put accent-coloured text on
-   whatever happens to be scrolling underneath. */
+.btn-primary { background: var(--accent); color: var(--accent-fg);
+               box-shadow: 0 10px 26px -14px color-mix(in srgb, var(--accent) 80%, transparent); }
+/* Filled rather than outlined where it rides the translucent call bar — a
+   transparent button there would put accent-coloured text on whatever happens
+   to be scrolling underneath. */
 .btn-secondary { background: var(--accent-wash); color: var(--accent-ink); border-color: var(--accent-edge); }
-.btn:hover { transform: scale(1.03); }
-.btn:active { transform: scale(.985); }
+.btn:hover { transform: translateY(-2px); }
+.btn:active { transform: translateY(0) scale(.99); }
 .btn-sm { padding: .5rem 1.05rem; font-size: .94rem; }
-.on-night .btn-primary { background: var(--accent-bright); color: var(--night); }
+.btn-lg { padding: 1.05rem 2rem; font-size: 1.08rem; }
+.on-night .btn-primary { background: var(--accent-bright); color: var(--night); box-shadow: none; }
 .on-night .btn-secondary { background: transparent; color: var(--accent-bright); border-color: var(--accent-edge); }
 
 /* Apple's other call to action: a coloured label with a chevron. The chevron
    is the non-colour signal that this is a link (1.4.1). */
 .chev {
   display: inline-flex; align-items: center; gap: .25rem;
-  text-decoration: none; font-weight: 500; color: var(--accent-ink);
+  text-decoration: none; font-weight: 550; color: var(--accent-ink);
 }
 .chev::after { content: "\203A"; font-size: 1.25em; line-height: 1; transform: translateY(-.06em); transition: transform .2s ease; }
 .chev:hover::after { transform: translate(3px, -.06em); }
@@ -223,6 +262,14 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
 .pill.is-open { color: var(--accent-ink); border-color: var(--accent-edge); background: var(--accent-wash); }
 .pill.is-open .pill-dot { background: var(--accent); }
 
+/* A chip: a plain label, used for towns served and for tags. */
+.chips { display: flex; flex-wrap: wrap; gap: .55rem; list-style: none; padding: 0; margin: 0; }
+.chip {
+  font-size: .92rem; color: var(--ink); background: var(--sunk);
+  border: 1px solid var(--hairline); border-radius: var(--r-pill);
+  padding: .42rem .95rem;
+}
+
 /* ---------- nav ---------- */
 /* {{ palette.chrome_alpha }}% comes from design.CHROME_ALPHA, which is also
    what design.audit() composites the bar's labels against. Hard-coding it here
@@ -235,24 +282,30 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--hairline);
 }
-.nav-in { display: flex; align-items: center; gap: 1rem; min-height: 52px; }
+.nav-in { display: flex; align-items: center; gap: 1rem; min-height: 54px; }
 .nav-name {
+  font-family: var(--font-display);
   font-size: 1.05rem; font-weight: 600; letter-spacing: -.02em;
   text-decoration: none; color: inherit; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.nav-links { display: none; gap: 1.75rem; margin-left: 1.5rem; }
+.nav-links { display: none; gap: 1.6rem; margin-left: 1.5rem; }
 /* --muted-strong, not --muted: this text sits on a translucent bar with a
    night section liable to be scrolling under it. */
 .nav-link { font-size: .88rem; color: var(--muted-strong); text-decoration: none; }
 .nav-link:hover { color: var(--ink); text-decoration: underline; }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: .7rem; }
-@media (min-width: 860px) { .nav-links { display: flex; } }
+@media (min-width: 900px) { .nav-links { display: flex; } }
+/* The reading-progress hairline. Decoration only — it carries no information
+   the scrollbar does not — so it is aria-hidden and it animates on a scroll
+   timeline rather than a clock, which keeps 2.2.2 out of it entirely. */
+.nav-progress { height: 2px; background: var(--accent); transform-origin: 0 50%; transform: scaleX(0); }
 
 /* ---------- sections ---------- */
-.section { padding: var(--section) 0; }
-.section-tight { padding: calc(var(--section) * .62) 0; }
+.section { padding: var(--section) 0; position: relative; }
+.section-tight { padding: calc(var(--section) * .55) 0; }
 .section-sunk { background: var(--sunk); }
+.section-wash { background: var(--accent-wash); }
 
 /* A dark section re-points the tokens instead of restating colours per
    component. Anything dropped in here — a card, a pill, a lede, a link that
@@ -276,85 +329,226 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
   --focus-halo: var(--night);
 }
 
-/* ---------- hero ---------- */
-.hero { padding: clamp(3rem, 8vw, 6rem) 0 0; }
-.hero-copy { padding-bottom: clamp(2.25rem, 5vw, 3.5rem); }
-.actions { display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; align-items: center; margin-top: 1.9rem; }
-.centre .actions { justify-content: center; }
+/* The section header: eyebrow, headline, one line of introduction. */
+.head { max-width: 62ch; }
+.centre .head { margin-inline: auto; }
+.head-lede { margin-top: 1.1rem; }
 
-/* The image slot: owner photography when it exists, generated artwork until
-   then. Same box either way, so the layout never shifts when photos arrive. */
-/* A deep panel with an aurora in the business's own hue. Dark on purpose: a
-   pale gradient reads as an empty placeholder, and this has to hold the screen
-   the way a product shot would. Owner photography replaces it entirely. */
+/* ---------- hero ---------- */
+.hero { padding: clamp(2.75rem, 7vw, 5.5rem) 0 0; position: relative; }
+.hero-copy { padding-bottom: clamp(2.25rem, 5vw, 3.5rem); }
+.hero-full { padding: clamp(4rem, 12vw, 9rem) 0 clamp(3rem, 8vw, 6rem); }
+.actions { display: flex; flex-wrap: wrap; gap: .8rem 1.4rem; align-items: center; margin-top: 1.9rem; }
+.centre .actions { justify-content: center; }
+/* Two columns where there is room, one where there is not. `minmax(0, …)` and
+   `min-width: 0` because an auto track refuses to go narrower than its
+   content, and at 200% text that pushed the right column off the screen. */
+.split { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
+.split > * { min-width: 0; }
+@media (min-width: 920px) {
+  .split { grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 4rem; }
+  .split-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+  .split-flip > :first-child { order: 2; }
+}
+
+/* ---------- image slots ----------
+   Owner photography when it exists, licensed stock on a demo, generated
+   artwork until then. Same box every time, so the layout never shifts on the
+   day the real pictures arrive.
+
+   The panel is deep and coloured on purpose: a pale gradient reads as an empty
+   placeholder, and this has to hold the screen the way a product shot would. */
 .art-panel {
   position: relative; overflow: hidden; isolation: isolate;
   border-radius: var(--r-panel);
+  /* Analogous only. An earlier version put a fourth layer at the complementary
+     hue in here and every panel came out the colour of a puddle: two opposite
+     hues at 30% over a dark base average to grey, which is exactly what
+     complementary means and exactly what you do not want a whole page of. The
+     alt glow is 42 degrees round, which is a neighbour rather than an
+     opposite. */
   background:
-    radial-gradient(105% 85% at 16% 8%, color-mix(in srgb, var(--accent-glow) 46%, transparent) 0%, transparent 56%),
-    radial-gradient(90% 80% at 88% 20%, color-mix(in srgb, var(--accent-glow-alt) 38%, transparent) 0%, transparent 60%),
-    radial-gradient(150% 120% at 52% 122%, color-mix(in srgb, var(--accent) 62%, transparent) 0%, transparent 74%),
-    linear-gradient(158deg, #1a1a1e 0%, #08080a 100%);
+    radial-gradient(115% 95% at 14% 4%, color-mix(in srgb, var(--accent-glow) 58%, transparent) 0%, transparent 58%),
+    radial-gradient(100% 90% at 90% 16%, color-mix(in srgb, var(--accent-glow-alt) 46%, transparent) 0%, transparent 62%),
+    radial-gradient(150% 125% at 50% 120%, color-mix(in srgb, var(--accent) 78%, transparent) 0%, transparent 74%),
+    linear-gradient(155deg, #17171c 0%, #09090b 100%);
   aspect-ratio: 16 / 10;
   --art-line: color-mix(in srgb, #ffffff 62%, transparent);
   --art-fill: #ffffff;
 }
 .art-panel-tall { aspect-ratio: 4 / 5; }
+.art-panel-wide { aspect-ratio: 21 / 9; }
+.art-panel-square { aspect-ratio: 1 / 1; }
 .art-svg, .art-photo { position: absolute; inset: 0; width: 100%; height: 100%; }
 .art-photo { object-fit: cover; }
-.art-caption { margin-top: .85rem; }
-
-/* ---------- stats ---------- */
-/* A description list, because "4.7" and "Google rating" are a pair and a
-   screen reader should be told so (1.3.1). Apple's layout puts the number
-   first and the label under it, which is the reverse of dt-then-dd, so the
-   flow is reversed visually rather than in the markup. */
-.stats { display: grid; gap: 2.5rem 3rem; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin: 0; }
-.stat { display: flex; flex-direction: column-reverse; }
-.stat-value { font-size: clamp(min(1.6rem, 8vw), 3vw, 2.4rem); font-weight: 650; letter-spacing: -.028em; line-height: 1.1; margin: 0; }
-.stat-label { color: var(--muted); font-size: .95rem; margin: .35rem 0 0; }
-
-/* ---------- sticky stage: the visual pins, the list advances ---------- */
-/* `minmax(0, 1fr)` rather than the implicit `auto`, and `min-width: 0` on the
-   children. An auto grid track refuses to go narrower than its content's
-   min-content width, so at 200% text (1.4.4) the column grew past the viewport
-   and `overflow-x: clip` on the body quietly cut the right-hand side off —
-   text that is unreachable, not merely off to the side. */
-.stage { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); }
-.stage > * { min-width: 0; }
-.stage-visual { position: relative; }
-@media (min-width: 900px) {
-  .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4.5rem; align-items: start; }
-  .stage-visual { position: sticky; top: 6.5rem; }
+/* A caption under a photograph, which is also where a stock credit goes. */
+.art-caption { margin-top: .8rem; }
+/* Grain. A tiled 1px-ish pattern rather than an SVG filter: a full-panel
+   feTurbulence is a real cost on a five-year-old phone and this is the same
+   effect for none of it. Only the templates that ask for it get any. */
+.grain::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  opacity: {{ style.grain }};
+  background-image: radial-gradient(#fff .6px, transparent .6px);
+  background-size: 4px 4px; mix-blend-mode: overlay;
 }
 
-/* ---------- services: one layout per template ---------- */
-/* All three are <ul>. A run of services, or of reasons to call, is a list, and
-   saying so is what tells a screen reader "3 items" before reading them. */
-.cards, .menu, .stack { list-style: none; padding: 0; }
+/* ---------- stats ---------- */
+/* A description list, because "Open" and "8am – 5pm" are a pair and a screen
+   reader should be told so (1.3.1). The layout puts the value first and the
+   label under it, which is the reverse of dt-then-dd, so the flow is reversed
+   visually rather than in the markup. */
+.stats { display: grid; gap: 2.25rem 3rem; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin: 0; }
+.stat { display: flex; flex-direction: column-reverse; }
+.stat-value { font-family: var(--font-display); font-size: clamp(min(1.55rem, 8vw), 2.8vw, 2.3rem); font-weight: 650; letter-spacing: -.028em; line-height: 1.12; margin: 0; }
+.stat-label { color: var(--muted); font-size: .92rem; margin: .35rem 0 0; }
+
+/* ---------- the call plate ----------
+   A phone number the size of a headline inside a bordered plate: the visual
+   language of a van door, and the only thing on the page that has to work when
+   someone is standing outside in the rain. */
+.plate {
+  display: block; text-decoration: none; color: inherit;
+  border: 1px solid var(--hairline); border-radius: var(--r-panel);
+  background: var(--surface); padding: 1.4rem 1.6rem 1.6rem;
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.plate:hover { transform: translateY(-3px); box-shadow: 0 24px 50px -30px color-mix(in srgb, var(--ink) 60%, transparent); }
+.plate-label { display: flex; justify-content: space-between; gap: 1rem; font-size: .82rem;
+               text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.plate-number { display: block; font-family: var(--font-display); font-weight: 700;
+                font-size: clamp(min(1.9rem, 8.5vw), 4.4vw, 2.9rem); letter-spacing: -.035em;
+                line-height: 1.1; margin: .55rem 0 .7rem; }
+.plate-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; font-size: .92rem; color: var(--muted); }
+
+/* ---------- lists of services ----------
+   All of them are <ul>. A run of services, or of reasons to call, is a list,
+   and saying so is what tells a screen reader "6 items" before reading them. */
+.cards, .menu, .stack, .index-list, .rail, .steps, .faq, .tiles, .timetable { list-style: none; padding: 0; margin: 0; }
+
 /* `min(272px, 100%)`, not a bare 272px: a fixed minimum in an auto-fit track
    cannot shrink below itself, so at 200% text on a 390px phone the grid was
    wider than the screen. */
-.cards { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(272px, 100%), 1fr)); margin: 0; }
+.cards { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(272px, 100%), 1fr)); }
+.cards-2 { grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); }
+.cards-1 { grid-template-columns: minmax(0, 1fr); }
 .card {
   border-radius: var(--r-card); background: var(--surface);
   border: 1px solid var(--hairline); padding: 1.9rem 1.7rem; min-width: 0;
-  transition: transform .3s ease, box-shadow .3s ease;
+  transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
 }
-.card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px -22px color-mix(in srgb, var(--ink) 45%, transparent); }
+.card:hover { transform: translateY(-4px); border-color: var(--accent-edge);
+              box-shadow: 0 20px 44px -24px color-mix(in srgb, var(--ink) 45%, transparent); }
+.card-num { font-family: var(--font-detail); font-size: .8rem; font-weight: 700;
+            letter-spacing: .12em; color: var(--accent-ink); display: block; margin-bottom: .9rem; }
 .card-name { font-size: clamp(1rem, 1.22rem, 7vw); font-weight: 600; letter-spacing: -.02em; margin: 0 0 .5rem; }
 .card-copy { color: var(--muted); margin: 0; }
+.card-art { border-radius: calc(var(--r-card) - 6px); margin-bottom: 1.3rem; }
 
-.menu { display: grid; gap: 0; margin: 0; }
-.menu-row { padding: 1.6rem 0; border-bottom: 1px solid var(--hairline); }
+/* The menu: a ruled row with the name on the left and the description on the
+   right, joined by leaders. The leader is a border on a flex spacer rather
+   than a row of dots in the markup, so a screen reader never reads it. */
+.menu { display: grid; gap: 0; }
+.menu-row { padding: 1.5rem 0; border-bottom: 1px solid var(--hairline); }
 .menu-row:last-child { border-bottom: none; }
-.menu-name { font-size: clamp(1rem, 1.3rem, 7vw); font-weight: 600; letter-spacing: -.022em; margin: 0 0 .35rem; }
-.menu-copy { color: var(--muted); margin: 0; }
+.menu-head { display: flex; align-items: baseline; gap: .75rem; }
+.menu-name { font-family: var(--font-display); font-size: clamp(1.05rem, 1.35rem, 7vw); font-weight: 600; letter-spacing: -.018em; margin: 0; }
+.menu-leader { flex: 1 1 auto; border-bottom: 1px dotted var(--hairline); transform: translateY(-.28em); min-width: 1.5rem; }
+.menu-copy { color: var(--muted); margin: .45rem 0 0; max-width: 62ch; }
 
-.stack { display: grid; gap: 2.25rem; margin: 0; }
-.stack-row { display: grid; gap: .4rem; }
+.stack { display: grid; gap: 2.1rem; }
+.stack-row { display: grid; gap: .4rem; padding-left: 1.25rem; border-left: 2px solid var(--accent-edge); }
 .stack-name { font-size: clamp(1rem, 1.28rem, 7vw); font-weight: 600; letter-spacing: -.022em; }
 .stack-copy { color: var(--muted); margin: 0; }
+
+/* The numbered index: a table of contents for a practice. */
+.index-list { display: grid; }
+.index-row { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 1rem;
+             padding: 1.6rem 0; border-top: 1px solid var(--hairline); align-items: start; }
+.index-row:last-child { border-bottom: 1px solid var(--hairline); }
+.index-num { font-family: var(--font-detail); font-size: .9rem; color: var(--accent-ink); padding-top: .3rem; letter-spacing: .06em; }
+.index-name { font-family: var(--font-display); font-size: clamp(1.1rem, 1.5rem, 7vw); font-weight: 600; letter-spacing: -.02em; margin: 0 0 .35rem; }
+.index-copy { color: var(--muted); margin: 0; max-width: 60ch; }
+
+/* The rail: a horizontal run that snaps, with no JavaScript and no arrows.
+   `overscroll-behavior-x: contain` stops a swipe at the end of the rail from
+   turning into a browser back-gesture. */
+.rail {
+  display: grid; grid-auto-flow: column; grid-auto-columns: min(78vw, 340px);
+  gap: 1.1rem; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory; padding: .25rem var(--gutter) 1.5rem;
+  margin-inline: calc(var(--gutter) * -1);
+  scrollbar-width: thin;
+}
+.rail-item { scroll-snap-align: center; }
+.rail-card { border-radius: var(--r-card); overflow: hidden; border: 1px solid var(--hairline); background: var(--surface); height: 100%; }
+.rail-body { padding: 1.3rem 1.35rem 1.5rem; }
+
+/* Steps: what actually happens after they call. */
+.steps { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); counter-reset: step; }
+.step { position: relative; padding-top: 2.6rem; }
+.step::before {
+  counter-increment: step; content: counter(step, decimal-leading-zero);
+  position: absolute; top: 0; left: 0;
+  font-family: var(--font-detail); font-size: 1.6rem; font-weight: 700;
+  letter-spacing: -.02em; color: var(--accent-ink);
+}
+.step-rule { position: absolute; top: 1.1rem; left: 3.2rem; right: 0; height: 1px; background: var(--hairline); }
+.step-name { font-size: 1.15rem; font-weight: 600; letter-spacing: -.02em; margin: 0 0 .4rem; }
+.step-copy { color: var(--muted); margin: 0; }
+
+/* Tiles: the blocky variant, for the templates that want colour rather than
+   hairlines. */
+.tiles { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+.tile { border-radius: var(--r-card); padding: 1.75rem 1.6rem; background: var(--accent-wash);
+        border: 1px solid var(--accent-edge); transition: transform .3s ease; }
+.tile:nth-child(even) { background: var(--sunk); border-color: var(--hairline); }
+.tile-name { font-size: 1.18rem; font-weight: 650; letter-spacing: -.02em; margin: 0 0 .45rem; }
+.tile-copy { color: var(--muted); margin: 0; }
+
+/* The timetable, built from the same opening hours the footer prints. */
+.timetable { display: grid; gap: .5rem; }
+.slot { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: center;
+        padding: .95rem 1.15rem; border-radius: var(--r-card); background: var(--sunk); border: 1px solid var(--hairline); }
+.slot-day { font-weight: 600; letter-spacing: -.015em; }
+.slot-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Questions, as a native disclosure. No JavaScript, keyboard-operable for
+   free, and the arrow is a marker rather than a coloured word (1.4.1). */
+.faq { display: grid; }
+.faq-item { border-top: 1px solid var(--hairline); }
+.faq-item:last-child { border-bottom: 1px solid var(--hairline); }
+.faq-q {
+  display: flex; gap: 1rem; align-items: baseline; justify-content: space-between;
+  padding: 1.35rem 0; cursor: pointer; font-weight: 600; letter-spacing: -.018em;
+  font-size: 1.08rem; list-style: none;
+}
+.faq-q::-webkit-details-marker { display: none; }
+.faq-q::after { content: "+"; font-size: 1.5rem; line-height: 1; color: var(--accent-ink); flex: none; transition: transform .25s ease; }
+.faq-item[open] .faq-q::after { transform: rotate(45deg); }
+.faq-a { color: var(--muted); margin: 0; padding: 0 0 1.5rem; max-width: 68ch; }
+
+/* A pull quote. Only ever used where the words are the operator's own or the
+   business is fictional — a demo showcase — because a testimonial nobody gave
+   is exactly the fabrication the whole review step exists to stop. */
+.quote { margin: 0; }
+.quote-text { font-family: var(--font-display); font-size: clamp(1.35rem, 3vw, 2.1rem);
+              font-weight: var(--display-weight); line-height: 1.25; letter-spacing: -.025em; margin: 0; }
+.quote-by { display: block; margin-top: 1.2rem; font-size: .95rem; color: var(--muted); font-style: normal; }
+
+/* The band: one line, full width, impossible to scroll past. */
+.band { padding: clamp(3rem, 7vw, 5rem) 0; }
+.band-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem 2rem; }
+
+/* The marquee. It runs on a *scroll* timeline, not a clock, so it only moves
+   while the visitor moves — which keeps WCAG 2.2.2 (Pause, Stop, Hide) out of
+   the picture entirely rather than needing a pause button nobody would press.
+   aria-hidden because it is the services list again, said twice. */
+.marquee { overflow: hidden; border-block: 1px solid var(--hairline); padding: .9rem 0; }
+.marquee-track { display: flex; gap: 2.5rem; width: max-content; will-change: transform; }
+.marquee-item { font-family: var(--font-detail); font-size: .92rem; letter-spacing: .14em;
+                text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.marquee-item::after { content: "\2022"; margin-left: 2.5rem; color: var(--accent-ink); }
 
 /* ---------- contact ---------- */
 .contact-grid { display: grid; gap: 3rem; margin-top: 3rem; }
@@ -362,9 +556,9 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
 /* Underlined, because it is a link with no other mark: it inherits the body
    colour, so colour is not distinguishing it either (1.4.1). */
 .phone-xl {
-  display: inline-block; color: inherit;
+  display: inline-block; color: inherit; font-family: var(--font-display);
   text-decoration-thickness: .035em; text-underline-offset: .1em;
-  font-size: clamp(min(2rem, 9vw), 5.5vw, 3.4rem); font-weight: 650;
+  font-size: clamp(min(2rem, 9vw), 5vw, 3.2rem); font-weight: 650;
   letter-spacing: -.035em; line-height: 1.05;
 }
 .phone-xl:hover { color: var(--accent-ink); }
@@ -379,10 +573,27 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
 .hours-table .is-today th, .hours-table .is-today td { color: var(--ink); font-weight: 600; }
 .hours-caption { font-size: .95rem; font-weight: 600; text-align: left; padding-bottom: .6rem; color: var(--accent-ink); }
 
-/* No call-bar allowance in this padding any more: the bar is sticky, so it
-   brings its own space and the footer does not have to predict its height. */
-.footer { padding: 2.25rem 0 2.5rem; background: var(--sunk); }
+/* No call-bar allowance in this padding: the bar is sticky, so it brings its
+   own space and the footer does not have to predict its height. */
+.footer { padding: 2.5rem 0 2.75rem; background: var(--sunk); border-top: 1px solid var(--hairline); }
 .footer-in { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; }
+.credits { margin-top: 1rem; }
+
+/* ---------- the demo ribbon ----------
+   A demo always says it is one. This is the sentence that stops a pitch dying
+   on "wait, that's not my shop" — and it is a better sentence than any
+   headline the model can write, because the answer to it is "day one is me
+   photographing yours". */
+.ribbon {
+  position: relative; z-index: 45;
+  background: var(--ink); color: var(--surface);
+  font-size: .82rem; letter-spacing: .01em;
+}
+.ribbon-in { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center; padding: .55rem 0; }
+.ribbon strong { font-weight: 650; }
+.ribbon-tag { border: 1px solid color-mix(in srgb, var(--surface) 45%, transparent);
+              border-radius: var(--r-pill); padding: .1rem .6rem; font-size: .74rem;
+              text-transform: uppercase; letter-spacing: .12em; }
 
 /* ---------- mobile call bar ---------- */
 /* For a trade the call is the conversion, so on a phone it never leaves. */
@@ -417,45 +628,93 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
   .actions .btn { flex: 1 1 100%; }
 }
 
+/* ---------- sticky stage: the visual pins, the list advances ---------- */
+.stage { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); }
+.stage > * { min-width: 0; }
+.stage-visual { position: relative; }
+@media (min-width: 900px) {
+  .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4.5rem; align-items: start; }
+  .stage-visual { position: sticky; top: 6.5rem; }
+}
+
 /* ---------- motion ----------
    Scroll-driven, declarative, and entirely optional. Nothing below changes
-   what the page says or whether it can be read. */
+   what the page says or whether it can be read, and every rule that mentions
+   a timeline is inside this one block so that print can switch all of it off
+   and an older browser never sees any of it.
+
+   Which keyframe plays is --reveal, set from design.STYLES: a trade page drops
+   its content into place, a salon page softens into it. One page, one motion
+   character. */
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
     .rise {
-      animation: rise linear both;
+      animation: var(--reveal) linear both;
       animation-timeline: view();
-      animation-range: entry 4% cover 26%;
+      animation-range: var(--reveal-range);
     }
     .art-panel {
       animation: settle linear both;
       animation-timeline: view();
-      animation-range: entry 0% cover 40%;
+      animation-range: entry 0% cover 42%;
     }
     .drift {
       animation: drift linear both;
       animation-timeline: view();
       animation-range: cover 0% cover 100%;
     }
+    .rail-item {
+      animation: var(--reveal) linear both;
+      animation-timeline: view(inline);
+      animation-range: entry 0% entry 90%;
+    }
+    .marquee-track {
+      animation: ticker linear both;
+      animation-timeline: scroll();
+    }
+    .nav-progress {
+      animation: progress linear both;
+      animation-timeline: scroll();
+    }
     /* The first screen is already in view on load, so it plays on a timer
        instead of a scroll position. */
-    .rise-now { animation: rise .75s cubic-bezier(.16, 1, .3, 1) both; }
-    .rise-now-2 { animation-delay: .1s; }
-    .rise-now-3 { animation-delay: .2s; }
+    .rise-now { animation: var(--reveal) .8s cubic-bezier(.16, 1, .3, 1) both; }
+    .rise-now-2 { animation-delay: .09s; }
+    .rise-now-3 { animation-delay: .18s; }
+    .rise-now-4 { animation-delay: .27s; }
   }
 }
+
 /* Opacity lands well before the movement does. Text at partial opacity is text
    below its contrast ratio, and while a transition is not what 1.4.3 measures
    — the settled page is — there is no reason for the window to be long, and an
    automated scan run during the first frames will report it. The travel is
    what the eye reads as the animation anyway. */
-@keyframes rise {
-  from { opacity: 0; transform: translateY(30px); }
-  35% { opacity: 1; }
-  to { opacity: 1; transform: none; }
-}
-@keyframes settle { from { opacity: .55; transform: scale(1.06); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(30px); } 35% { opacity: 1; } to { opacity: 1; transform: none; } }
+/* trade: arrives like it was dropped, no overshoot, nothing floats. */
+@keyframes drop { from { opacity: 0; transform: translateY(-18px); } 30% { opacity: 1; } to { opacity: 1; transform: none; } }
+/* food, and anything that should not appear to move at all. */
+@keyframes fade { from { opacity: 0; transform: translateY(10px); } 45% { opacity: 1; } to { opacity: 1; transform: none; } }
+/* salon, clinic: long, soft, slightly out of focus on the way in. */
+@keyframes soften { from { opacity: 0; transform: translateY(22px) scale(.985); filter: blur(6px); } 40% { opacity: 1; } to { opacity: 1; transform: none; filter: none; } }
+/* auto: horizontal, mechanical. */
+@keyframes slide { from { opacity: 0; transform: translateX(-34px); } 35% { opacity: 1; } to { opacity: 1; transform: none; } }
+/* wellness: comes up from below with force. */
+@keyframes surge { from { opacity: 0; transform: translateY(46px) scale(.97); } 30% { opacity: 1; } to { opacity: 1; transform: none; } }
+/* professional: the hairline draws, the text follows. Restraint as motion. */
+@keyframes rule { from { opacity: 0; transform: translateY(14px); clip-path: inset(0 100% 0 0); } 40% { opacity: 1; } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); } }
+/* retail, education: a pop with a degree of rotation. */
+@keyframes pop { from { opacity: 0; transform: scale(.9) rotate(-1.2deg); } 40% { opacity: 1; } to { opacity: 1; transform: none; } }
+/* pet: overshoots and settles, the way something excited arrives. */
+@keyframes spring { from { opacity: 0; transform: translateY(38px) scale(.94); } 40% { opacity: 1; } 70% { transform: translateY(-8px) scale(1.02); } to { opacity: 1; transform: none; } }
+/* creative: the frame wipes open rather than the content fading in. */
+@keyframes wipe { from { opacity: 0; clip-path: inset(0 0 100% 0); } 30% { opacity: 1; } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+/* home: barely anything, and slow. The imagery does the work. */
 @keyframes drift { from { transform: translateY(3%); } to { transform: translateY(-3%); } }
+
+@keyframes settle { from { opacity: .55; transform: scale(1.06); } to { opacity: 1; transform: none; } }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-33%); } }
+@keyframes progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* Windows high contrast and similar. The system replaces every colour with the
    user's own pair, which strips the gradients the art panels are made of and
@@ -465,13 +724,14 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
 @media (forced-colors: active) {
   .art-panel { display: none; }
   .btn { border-color: currentColor; }
-  .pill { border-color: currentColor; }
+  .pill, .chip { border-color: currentColor; }
+  .marquee, .nav-progress { display: none; }
   :focus-visible { outline-color: Highlight; }
 }
 
 @media print {
   .nav, .callbar { position: static; }
-  .callbar, .art-panel, .skip { display: none; }
+  .callbar, .art-panel, .skip, .marquee, .nav-progress, .rail { display: none; }
   /* The tokens have to come back with it. Flipping only `background` and
      `color` would leave --muted pointing at the night grey, which is 2.3:1 on
      white — the leave-behind's secondary lines would print as ghosts. */
@@ -487,5 +747,7 @@ h1, h2, h3, .display, .headline, .subhead, .phone-xl { overflow-wrap: break-word
      so anything below the fold is mid-animation at opacity 0. Print and PDF
      capture never scroll — without this, the leave-behind comes out blank
      below the first screen. */
-  .rise, .rise-now, .drift { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .rise, .rise-now, .drift, .rail-item, .marquee-track { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; clip-path: none !important; }
+  .faq-item { break-inside: avoid; }
+  .faq-a { display: block; }
 }

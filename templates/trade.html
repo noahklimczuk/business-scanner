@@ -1,38 +1,22 @@
+{# The van door. A dark first screen with the number on it, the work listed
+   plainly beside a pinned visual, and nothing anywhere that a roofer standing
+   in a driveway would call fancy.
+
+   Image slots, in document order: 0 hero · 1 services · 2-4 why · 5 about. #}
 {% extends "base.html" %}
-{% from "partials/hero.html" import art, hero_actions with context %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
 
-{% block hero %}
-<section class="hero">
-  <div class="shell centre hero-copy">
-    <p class="eyebrow rise-now">{{ lead.category or 'Local trade' }}{% if city %} · {{ city }}{% endif %}</p>
-    <h1 class="display rise-now rise-now-2">{{ c.hero_headline }}</h1>
-    <p class="lede measure-wide" style="margin-top:1.5rem">{{ c.hero_sub }}</p>
-    {{ hero_actions('Call ' ~ phone_display) }}
-  </div>
-  <div class="shell-wide">
-    {{ art(0) }}
-  </div>
-</section>
-{% endblock %}
-
-{% block services %}
-<section class="section section-sunk" id="services" aria-labelledby="services-h">
-  <div class="shell-wide stage">
-    <div class="stage-visual">
-      {{ art(1, tall=True) }}
-    </div>
-    <div>
-      <p class="eyebrow rise">What we do</p>
-      <h2 class="headline rise" id="services-h">The work, plainly</h2>
-      <ul class="cards rise" role="list" style="margin-top:2.5rem;grid-template-columns:1fr">
-        {% for service in c.services %}
-        <li class="card">
-          <h3 class="card-name">{{ service.name }}</h3>
-          <p class="card-copy">{{ service.description }}</p>
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
-  </div>
-</section>
+{% block sections %}
+{{ heroes.hero_slab(fallback='Local trade', label='Call the shop', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_stage(title='The work, plainly', eyebrow='What we do', slot=1) }}
+{{ blocks.process_steps(heading='How it works') }}
+{{ blocks.why_grid(art=True, first=2) }}
+{{ blocks.about_split(night=True, slot=5) }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=True, title='Where to find us') }}
 {% endblock %}

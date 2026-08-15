@@ -1,0 +1,253 @@
+{# Eleven ways to lay out the same list of services. The layout is most of what
+   makes a garage page not look like a dental page, so it is the piece that
+   differs most between templates.
+
+   Every one of them is a <ul role="list"> whose items carry an <h3>, so the
+   heading outline and the list semantics are identical no matter which is
+   chosen — the difference is entirely visual. #}
+{% import "sections/media.html" as media with context %}
+
+
+{% macro _head(title, eyebrow, id='services-h', centre=False) %}
+<div class="head{{ ' centre' if centre else '' }} rise">
+  <p class="eyebrow">{{ eyebrow or services_word }}</p>
+  <h2 class="headline" id="{{ id }}">{{ title }}</h2>
+  {% if c.services_intro %}<p class="lede head-lede">{{ c.services_intro }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# The sticky stage: the visual pins while the list advances past it. #}
+{% macro services_stage(title='The work, plainly', eyebrow='', flip=False,
+                        sunk=True, slot=1) %}
+<section class="section{{ ' section-sunk' if sunk else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell-wide stage">
+    {% if not flip %}<div class="stage-visual">{{ media.art(slot, 'tall') }}</div>{% endif %}
+    <div>
+      {{ _head(title, eyebrow) }}
+      <ul class="cards cards-1 rise" role="list" style="margin-top:2.5rem">
+        {% for service in c.services %}
+        <li class="card">
+          <span class="card-num" aria-hidden="true">{{ '%02d' % loop.index }}</span>
+          <h3 class="card-name">{{ service.name }}</h3>
+          <p class="card-copy">{{ service.description }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% if flip %}<div class="stage-visual">{{ media.art(slot, 'tall') }}</div>{% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+
+{# A plain grid of cards, optionally numbered. #}
+{% macro services_cards(title='What we do', eyebrow='', night=False, sunk=False,
+                        numbered=True, centre=False) %}
+<section class="section{{ ' on-night' if night else '' }}{{ ' section-sunk' if sunk and not night else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell{{ ' centre' if centre else '' }}">
+    {{ _head(title, eyebrow, centre=centre) }}
+    <ul class="cards rise" role="list" style="margin-top:2.75rem;text-align:left">
+      {% for service in c.services %}
+      <li class="card">
+        {% if numbered %}<span class="card-num" aria-hidden="true">{{ '%02d' % loop.index }}</span>{% endif %}
+        <h3 class="card-name">{{ service.name }}</h3>
+        <p class="card-copy">{{ service.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The menu: ruled rows joined by dot leaders. The leader is a border on a
+   flex spacer, not characters in the markup, so it is never read aloud. #}
+{% macro services_menu(title='What we serve', eyebrow='', slot=1) %}
+<section class="section" id="services" aria-labelledby="services-h">
+  <div class="shell centre">
+    {{ _head(title, eyebrow, centre=True) }}
+  </div>
+  <div class="shell-wide" style="margin-top:3rem">{{ media.art(slot, 'wide') }}</div>
+  <div class="shell-narrow">
+    <ul class="menu rise" role="list" style="margin-top:3.5rem">
+      {% for service in c.services %}
+      <li class="menu-row">
+        <div class="menu-head">
+          <h3 class="menu-name">{{ service.name }}</h3>
+          <span class="menu-leader" aria-hidden="true"></span>
+        </div>
+        <p class="menu-copy">{{ service.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# A quiet stack with a rule down the left. #}
+{% macro services_stack(title='What we offer', eyebrow='', flip=True, slot=1) %}
+<section class="section" id="services" aria-labelledby="services-h">
+  <div class="shell-wide stage">
+    <div>
+      {{ _head(title, eyebrow) }}
+      <ul class="stack rise" role="list" style="margin-top:2.75rem">
+        {% for service in c.services %}
+        <li class="stack-row">
+          <h3 class="stack-name">{{ service.name }}</h3>
+          <p class="stack-copy">{{ service.description }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="stage-visual">{{ media.art(slot, 'tall') }}</div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The numbered index: a table of contents for a practice. #}
+{% macro services_index(title='What we do', eyebrow='', sunk=False) %}
+<section class="section{{ ' section-sunk' if sunk else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell">
+    {{ _head(title, eyebrow) }}
+    <ul class="index-list rise" role="list" style="margin-top:2.5rem">
+      {% for service in c.services %}
+      <li class="index-row">
+        <span class="index-num" aria-hidden="true">{{ '%02d' % loop.index }}</span>
+        <div>
+          <h3 class="index-name">{{ service.name }}</h3>
+          <p class="index-copy">{{ service.description }}</p>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The rail: a shelf you push sideways. Snaps, no arrows, no JavaScript. #}
+{% macro services_rail(title='In the shop', eyebrow='', first=1) %}
+<section class="section" id="services" aria-labelledby="services-h">
+  <div class="shell">{{ _head(title, eyebrow) }}</div>
+  <div class="shell-wide">
+    <ul class="rail" role="list" style="margin-top:2.5rem">
+      {% for service in c.services %}
+      <li class="rail-item">
+        <div class="rail-card">
+          {{ media.art(first + loop.index0, 'square', parallax=False) }}
+          <div class="rail-body">
+            <h3 class="card-name">{{ service.name }}</h3>
+            <p class="card-copy">{{ service.description }}</p>
+          </div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# Colour blocks. Alternating fills rather than hairlines. #}
+{% macro services_tiles(title='What we do', eyebrow='', sunk=False, centre=False) %}
+<section class="section{{ ' section-sunk' if sunk else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell{{ ' centre' if centre else '' }}">
+    {{ _head(title, eyebrow, centre=centre) }}
+    <ul class="tiles rise" role="list" style="margin-top:2.75rem;text-align:left">
+      {% for service in c.services %}
+      <li class="tile">
+        <h3 class="tile-name">{{ service.name }}</h3>
+        <p class="tile-copy">{{ service.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The ticket: a workshop docket. Monospaced numbers, hard rules, no radius. #}
+{% macro services_ticket(title='On the ramp', eyebrow='', night=True, slot=1) %}
+<section class="section{{ ' on-night' if night else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell-wide split split-wide">
+    <div>
+      {{ _head(title, eyebrow) }}
+      <ul class="index-list rise" role="list" style="margin-top:2rem">
+        {% for service in c.services %}
+        <li class="index-row">
+          <span class="index-num" aria-hidden="true">{{ '%02d' % loop.index }}</span>
+          <div>
+            <h3 class="index-name">{{ service.name }}</h3>
+            <p class="index-copy">{{ service.description }}</p>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="rise">{{ media.art(slot, 'square') }}</div>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# Soft cards with their own artwork. Roomy, calm, nothing sharp. #}
+{% macro services_soft(title='How we help', eyebrow='', sunk=True, first=1) %}
+<section class="section{{ ' section-sunk' if sunk else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell centre">{{ _head(title, eyebrow, centre=True) }}</div>
+  <div class="shell">
+    <ul class="cards cards-2 rise" role="list" style="margin-top:2.75rem;text-align:left">
+      {% for service in c.services %}
+      <li class="card">
+        {{ media.art(first + loop.index0, klass='card-art', ratio='16/7', parallax=False) }}
+        <h3 class="card-name">{{ service.name }}</h3>
+        <p class="card-copy">{{ service.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# Full-bleed alternating frames. The image is the section; the words sit under
+   it like a caption in a monograph. #}
+{% macro services_showcase(title='Selected work', eyebrow='', night=True, first=1) %}
+<section class="section{{ ' on-night' if night else '' }}" id="services" aria-labelledby="services-h">
+  <div class="shell">{{ _head(title, eyebrow) }}</div>
+  <div class="shell-wide">
+    <ul class="cards cards-2 rise" role="list" style="margin-top:3rem">
+      {% for service in c.services %}
+      <li>
+        {{ media.art(first + loop.index0, 'square' if loop.index0 % 2 else 'tall', parallax=False) }}
+        <h3 class="card-name" style="margin-top:1.1rem">{{ service.name }}</h3>
+        <p class="card-copy">{{ service.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}
+
+
+{# The season band: outdoor work is a calendar, so the list reads as one. #}
+{% macro services_season(title='Through the year', eyebrow='', slot=1) %}
+<section class="section" id="services" aria-labelledby="services-h">
+  <div class="shell-wide split split-flip">
+    <div class="rise">{{ media.art(slot, 'tall') }}</div>
+    <div>
+      {{ _head(title, eyebrow) }}
+      <ul class="stack rise" role="list" style="margin-top:2.5rem">
+        {% for service in c.services %}
+        <li class="stack-row">
+          <h3 class="stack-name">{{ service.name }}</h3>
+          <p class="stack-copy">{{ service.description }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+{% endmacro %}

@@ -1,0 +1,29 @@
+{# The gallery. Dark the whole way down the top half, thin serif display, and
+   the work in unrounded frames with a mat around them. The reveal is a wipe:
+   the frame opens rather than the picture fading in.
+
+   Image slots: 0 hero · 1-6 the work · 7 about. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_frame(fallback='Studio', label='Get in touch', slot=0) }}
+{{ blocks.stats_strip(night=True) }}
+{{ services.services_showcase(title='Selected work', eyebrow='Portfolio', night=True, first=1) }}
+{{ blocks.about_split(night=False, flip=True, slot=7) }}
+{{ blocks.quote_band(night=True) }}
+{{ blocks.process_steps(heading='How a booking works', sunk=True) }}
+{{ blocks.why_row(night=False, heading='How we work') }}
+{{ blocks.faq_list(sunk=False) }}
+{{ blocks.contact_block(night=True, eyebrow='Enquiries') }}
+{% endblock %}
+
+{% block extra_css %}
+/* The mat: a wide border in the page colour around the picture, the way a
+   print is mounted. It is the only ornament on the template. */
+.matte { padding: clamp(.75rem, 2vw, 1.5rem); border: 1px solid var(--hairline); background: var(--surface); }
+.on-night .matte { background: var(--night-sunk); }
+.eyebrow { font-size: .74rem; }
+{% endblock %}

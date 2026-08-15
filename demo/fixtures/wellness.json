@@ -1,0 +1,108 @@
+{
+  "version": 2,
+  "template": "wellness",
+  "lead": {
+    "place_id": "demo-wellness-northbound",
+    "name": "Northbound Strength",
+    "category": "Gym",
+    "address": "55 Cedar Pointe Dr, Barrie, ON L4N 5R7, Canada",
+    "phone": "(705) 555-0136",
+    "phone_e164": "+17055550136",
+    "lat": 44.3576,
+    "lng": -79.71,
+    "hours": [
+      "Monday: 5:30 AM – 9:00 PM",
+      "Tuesday: 5:30 AM – 9:00 PM",
+      "Wednesday: 5:30 AM – 9:00 PM",
+      "Thursday: 5:30 AM – 9:00 PM",
+      "Friday: 5:30 AM – 8:00 PM",
+      "Saturday: 7:00 AM – 2:00 PM",
+      "Sunday: 8:00 AM – 12:00 PM"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Strength training",
+    "hero_headline": "Get strong enough that the rest gets easier",
+    "hero_sub": "Coached barbell training and small classes in Barrie.",
+    "about": [
+      "A room with platforms, racks and enough plates that nobody waits. Sessions are coached: somebody is watching the bar and telling you what to change on the next set.",
+      "Most people who train here are not athletes. They are people who want to carry things, get off the floor easily and not dread their sixties."
+    ],
+    "services_intro": "Four ways in, depending on how much coaching you want.",
+    "services": [
+      {
+        "name": "Coached small groups",
+        "description": "Six people, one coach, and a programme written for the group."
+      },
+      {
+        "name": "One-to-one coaching",
+        "description": "For a specific goal, or for getting back after an injury."
+      },
+      {
+        "name": "Beginner block",
+        "description": "Four weeks of learning the five lifts before joining a group."
+      },
+      {
+        "name": "Open training",
+        "description": "The floor, the racks and a coach within earshot."
+      },
+      {
+        "name": "Conditioning classes",
+        "description": "Thirty minutes, bikes and sleds, no barbell."
+      }
+    ],
+    "process_headline": "Starting out",
+    "process": [
+      {
+        "name": "Come and look",
+        "description": "Walk in during opening hours and watch a session."
+      },
+      {
+        "name": "Do the beginner block",
+        "description": "Four weeks learning to move under a bar."
+      },
+      {
+        "name": "Join a group",
+        "description": "Pick the times that fit your week and start training."
+      }
+    ],
+    "faq": [
+      {
+        "q": "What are your hours?",
+        "a": "Weekdays from half five in the morning, Saturday mornings, and Sunday until noon."
+      },
+      {
+        "q": "I have never lifted before. Is that a problem?",
+        "a": "No. The beginner block exists for exactly that, and everyone here has done it."
+      },
+      {
+        "q": "Do I need to book?",
+        "a": "Groups and one-to-one, yes. Open training you can walk into any time we are open."
+      },
+      {
+        "q": "Where are you?",
+        "a": "Cedar Pointe Drive in Barrie, in the unit at the back of the lot."
+      }
+    ],
+    "why_us": [
+      "Six to a group, never more",
+      "A coach watching every set",
+      "Programmes written, not improvised"
+    ],
+    "cta_line": "Ring and come and watch a session",
+    "closing_note": "Sunday mornings are the quietest if you would rather start without an audience.",
+    "meta_title": "Northbound Strength — Gym in Barrie",
+    "meta_description": "Coached barbell training, small groups and beginner blocks in Barrie, Ontario.",
+    "service_areas": [
+      "Barrie",
+      "Innisfil",
+      "Oro-Medonte",
+      "Angus"
+    ],
+    "quote": {
+      "text": "I came in able to do none of this and nobody made me feel it.",
+      "by": "Helen M., Barrie"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

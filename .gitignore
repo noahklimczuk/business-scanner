@@ -9,6 +9,11 @@ leads.db-shm
 # Generated client sites (Phase 3+).
 sites/
 
+# Sample sites, rebuilt from demo/fixtures/ by `leadsmith demo` in a few
+# seconds. The fixtures are the source; these are the output, photographs and
+# all, and there is no reason to carry a few megabytes of stock JPEG in git.
+demos/
+
 # The operator's dashboard (Phase 6). Every client's revenue is on it.
 board.html
 

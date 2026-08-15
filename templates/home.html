@@ -1,0 +1,31 @@
+{# The property. A wide landscape band across the top with the copy on a card
+   that overlaps it, then the year laid out as a calendar of work.
+
+   Image slots: 0 hero · 1 services · 2-5 gallery · 6-8 why · 9 about. #}
+{% extends "base.html" %}
+{% import "sections/heroes.html" as heroes with context %}
+{% import "sections/services.html" as services with context %}
+{% import "sections/blocks.html" as blocks with context %}
+
+{% block sections %}
+{{ heroes.hero_scape(fallback='Property services', label='Call', slot=0) }}
+{{ blocks.stats_strip() }}
+{{ services.services_season(title='Through the year', eyebrow='What we look after', slot=1) }}
+{{ blocks.process_steps(heading='How a job runs', sunk=True) }}
+{{ blocks.gallery_rail(count=4, first=2, heading='Recent work', title='Properties we look after') }}
+{{ blocks.why_grid(art=True, first=6, heading='Why call us') }}
+{{ blocks.about_split(night=True, flip=True, slot=9) }}
+{{ blocks.quote_band(night=False) }}
+{{ blocks.faq_list() }}
+{{ blocks.cta_band() }}
+{{ blocks.contact_block(night=False, eyebrow='Book a visit', title='Where we are') }}
+{% endblock %}
+
+{% block extra_css %}
+/* The card overlaps the landscape band rather than sitting under it, which is
+   what stops the first screen reading as two unrelated rectangles. On a phone
+   it only overlaps a little, because there is not the height to spare. */
+.hero-scape-card { margin-top: -2.5rem; position: relative; z-index: 2; }
+@media (min-width: 900px) { .hero-scape-card { margin-top: -6rem; max-width: 820px; } }
+.hero-scape-art { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+{% endblock %}

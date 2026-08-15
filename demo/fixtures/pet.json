@@ -1,0 +1,116 @@
+{
+  "version": 2,
+  "template": "pet",
+  "lead": {
+    "place_id": "demo-pet-hazels",
+    "name": "Hazel's Dog Grooming",
+    "category": "Pet groomer",
+    "address": "21 The Queensway S, Keswick, ON L4P 2B4, Canada",
+    "phone": "(905) 555-0181",
+    "phone_e164": "+19055550181",
+    "lat": 44.2295,
+    "lng": -79.4661,
+    "hours": [
+      "Monday: Closed",
+      "Tuesday: 8:00 AM – 5:00 PM",
+      "Wednesday: 8:00 AM – 5:00 PM",
+      "Thursday: 8:00 AM – 6:00 PM",
+      "Friday: 8:00 AM – 5:00 PM",
+      "Saturday: 8:00 AM – 2:00 PM",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Dog grooming",
+    "hero_headline": "A haircut your dog does not dread",
+    "hero_sub": "One dog at a time, by appointment, on the Queensway.",
+    "about": [
+      "One dog in the shop at a time. No kennels, no waiting around in a crate, and no other dogs barking through the wall while yours is being dried.",
+      "Nervous dogs are the normal case rather than the difficult one. First visits are short on purpose — sometimes all that happens is a brush and a biscuit, and that is a good first visit."
+    ],
+    "services_intro": "What a groom includes, and what can be booked on its own.",
+    "services": [
+      {
+        "name": "Full groom",
+        "description": "Bath, dry, clip, ears, nails and a finish you can maintain."
+      },
+      {
+        "name": "Bath and tidy",
+        "description": "Washed, dried and neatened without a full clip."
+      },
+      {
+        "name": "Puppy first visit",
+        "description": "Short, gentle and mostly about the room not being frightening."
+      },
+      {
+        "name": "Nails and ears",
+        "description": "On its own, in and out, no appointment-length wait."
+      },
+      {
+        "name": "De-shedding",
+        "description": "For the coats that fill a house between March and June."
+      },
+      {
+        "name": "Hand-stripping",
+        "description": "For terrier coats that a clipper would ruin."
+      }
+    ],
+    "process_headline": "A visit, start to finish",
+    "process": [
+      {
+        "name": "Drop off",
+        "description": "You come in, we talk about the coat, you go."
+      },
+      {
+        "name": "One dog, no rush",
+        "description": "No crate, no queue, no waiting for a dryer."
+      },
+      {
+        "name": "A text when ready",
+        "description": "Usually two to three hours, and we say if it will be longer."
+      },
+      {
+        "name": "Pick up",
+        "description": "With a note on what to brush and how often."
+      }
+    ],
+    "faq": [
+      {
+        "q": "When are you open?",
+        "a": "Tuesday to Saturday. Thursday runs until six, Saturday finishes at two."
+      },
+      {
+        "q": "My dog is nervous. Is that a problem?",
+        "a": "No — it is most dogs. First visits are kept short deliberately."
+      },
+      {
+        "q": "How long does a groom take?",
+        "a": "Usually two to three hours. You get a message when your dog is ready."
+      },
+      {
+        "q": "Where do I park?",
+        "a": "Directly outside on the Queensway, or in the lot behind the unit."
+      }
+    ],
+    "why_us": [
+      "One dog in the shop at a time",
+      "No crates and no waiting around",
+      "Nervous dogs are the normal case"
+    ],
+    "cta_line": "Ring and tell us about your dog",
+    "closing_note": "Bring the lead — collars come off for the groom and go back on at the door.",
+    "meta_title": "Hazel's Dog Grooming — Dog groomer in Keswick",
+    "meta_description": "One-dog-at-a-time grooming, bathing and de-shedding on the Queensway in Keswick, Ontario.",
+    "service_areas": [
+      "Keswick",
+      "Sutton",
+      "Jackson's Point",
+      "Newmarket"
+    ],
+    "quote": {
+      "text": "Third groomer we tried and the first one he walks into willingly.",
+      "by": "Bea C., Keswick"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}

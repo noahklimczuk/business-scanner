@@ -1,0 +1,117 @@
+{
+  "version": 2,
+  "template": "home",
+  "lead": {
+    "place_id": "demo-home-cedarline",
+    "name": "Cedarline Property Care",
+    "category": "Landscaping service",
+    "address": "1240 King Rd, King City, ON L7B 1G2, Canada",
+    "phone": "(905) 555-0192",
+    "phone_e164": "+19055550192",
+    "lat": 43.926,
+    "lng": -79.5285,
+    "hours": [
+      "Monday: 7:00 AM – 6:00 PM",
+      "Tuesday: 7:00 AM – 6:00 PM",
+      "Wednesday: 7:00 AM – 6:00 PM",
+      "Thursday: 7:00 AM – 6:00 PM",
+      "Friday: 7:00 AM – 5:00 PM",
+      "Saturday: 8:00 AM – 12:00 PM",
+      "Sunday: Closed"
+    ]
+  },
+  "copy": {
+    "hero_eyebrow": "Property care",
+    "hero_headline": "The property looked after, all twelve months",
+    "hero_sub": "Lawns, beds, leaves and snow across King and the townships.",
+    "about": [
+      "We look after properties rather than doing one job and leaving. The same crew that cuts the grass in July clears the drive in January, which is why they know where the edge of it is.",
+      "Most clients are on a schedule through the season, but one-off work — a clearance, a bed rebuilt, a hedge brought back under control — is a normal thing to ring about."
+    ],
+    "services_intro": "What the year looks like, roughly in order.",
+    "services": [
+      {
+        "name": "Spring clean-up",
+        "description": "Beds cleared, edges cut back, and what winter left taken away."
+      },
+      {
+        "name": "Lawn maintenance",
+        "description": "Cutting, trimming and edging on a schedule through the season."
+      },
+      {
+        "name": "Beds and planting",
+        "description": "Rebuilding beds, mulching and putting in what will actually survive there."
+      },
+      {
+        "name": "Hedges and pruning",
+        "description": "Shaping, reducing and taking out what has outgrown the space."
+      },
+      {
+        "name": "Autumn leaf clearance",
+        "description": "Repeat visits through the fall rather than one hopeful pass."
+      },
+      {
+        "name": "Snow clearing",
+        "description": "Drives and walks, on a seasonal contract."
+      }
+    ],
+    "process_headline": "How a job runs",
+    "process": [
+      {
+        "name": "We walk the property",
+        "description": "With you, so we are looking at the same things."
+      },
+      {
+        "name": "A written schedule",
+        "description": "What gets done, when in the year, and what it costs."
+      },
+      {
+        "name": "The same crew each time",
+        "description": "They learn the property, which is most of the job."
+      },
+      {
+        "name": "We tell you what we found",
+        "description": "A dying tree or a blocked drain gets mentioned, not ignored."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Which areas do you cover?",
+        "a": "King City and the townships around it. Ring and ask if you are on the edge of that."
+      },
+      {
+        "q": "When can I reach you?",
+        "a": "Weekdays from seven, and Saturday mornings until noon."
+      },
+      {
+        "q": "Do you take one-off work?",
+        "a": "Yes. A clearance or a hedge is a perfectly normal thing to ring about."
+      },
+      {
+        "q": "Do you do winter as well?",
+        "a": "Snow clearing runs on a seasonal contract, booked before the first fall."
+      }
+    ],
+    "why_us": [
+      "The same crew all year",
+      "A written schedule, not a handshake",
+      "You hear about problems we find"
+    ],
+    "cta_line": "Ring us and we will come and walk it with you",
+    "closing_note": "Snow contracts are usually full by the middle of October.",
+    "meta_title": "Cedarline Property Care — Landscaping in King City",
+    "meta_description": "Lawn maintenance, beds, hedges, leaf clearance and snow clearing around King City, Ontario.",
+    "service_areas": [
+      "King City",
+      "Nobleton",
+      "Schomberg",
+      "Aurora",
+      "Kettleby"
+    ],
+    "quote": {
+      "text": "They noticed the drain was blocked before it was our problem.",
+      "by": "Simon D., Nobleton"
+    }
+  },
+  "note": "Copy, photography and the business itself are invented for this sample."
+}
