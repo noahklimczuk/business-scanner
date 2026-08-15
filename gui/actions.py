@@ -24,6 +24,7 @@ import config
 import db
 import deploy
 import generate
+import invoice as invoice_mod
 import offboard
 import pitch
 import prospect
@@ -393,6 +394,172 @@ def export_client(window, lead: dict[str, Any], directory: str) -> Optional[str]
     row = db.get(window.con, lead["place_id"])
     return offboard.write(dict(row), directory,
                           operator=window.cfg.get("business", {}))
+
+
+# ---------------------------------------------------------------------------
+# Invoicing
+#
+# None of this goes through `run_job`. That queue exists for work that spends
+# money, takes minutes or writes a site directory; raising an invoice is a
+# handful of rows and one HTML file, and putting it behind the progress bar
+# would mean it could be refused because a scan happened to be running.
+# ---------------------------------------------------------------------------
+def _invoice_page(window, number: str) -> str:
+    """Render the invoice and put it beside the database. Returns the path."""
+    html = invoice_mod.render(window.con, number,
+                              operator=window.cfg.get("business", {}),
+                              cfg=window.cfg)
+    return invoice_mod.write(number, html)
+
+
+def _warn_about_paying(window) -> None:
+    settings = invoice_mod.settings_from(window.cfg)
+    if settings["e_transfer_email"] or settings["cheque_payable_to"]:
+        return
+    window.error(
+        "That invoice has no way to pay it printed on it.",
+        "Set an e-transfer address or who cheques are payable to in "
+        "Settings, then open the invoice again to reprint it. Everything "
+        "else about it is fine — the client just has nowhere to send the "
+        "money.")
+
+
+def new_invoice(window, place_id: str = "") -> Optional[str]:
+    """Raise one, issue it unless asked not to, and open it to print."""
+    from gui.dialogs import InvoiceDialog
+
+    dialog = InvoiceDialog(window, window.con, window.cfg, place_id)
+    if not dialog.exec():
+        return None
+
+    try:
+        number = invoice_mod.create(
+            window.con, dialog.place_id(), dialog.result_lines(),
+            cfg=window.cfg, note=dialog.note(), terms_days=dialog.terms_days())
+        if dialog.issue_now():
+            invoice_mod.send(window.con, number)
+    except invoice_mod.InvoiceError as exc:
+        window.con.rollback()
+        window.error("That invoice was not raised.", str(exc))
+        return None
+    window.con.commit()
+
+    if not dialog.issue_now():
+        window.toast(f"{number} saved as a draft. Nothing has been issued.")
+        window.refresh()
+        return number
+
+    path = _invoice_page(window, number)
+    window.toast(f"{number} issued.")
+    window.refresh()
+    _warn_about_paying(window)
+    if window.confirm("Invoice raised",
+                      f"{number} is ready.\n\nOpen it now? Print it to PDF from "
+                      f"the browser, or hand it over.", "Open"):
+        open_path(path)
+    return number
+
+
+def open_invoice(window, number: str) -> None:
+    """Reprint it as it stands now — payments included."""
+    try:
+        path = _invoice_page(window, number)
+    except invoice_mod.InvoiceError as exc:
+        window.error(str(exc))
+        return
+    open_path(path)
+
+
+def record_payment(window, number: str) -> None:
+    from gui.dialogs import PaymentDialog
+
+    row = db.invoice(window.con, number)
+    if row is None:
+        window.error(f"There is no invoice {number}.")
+        return
+    lines = db.invoice_lines(window.con, int(row["id"]))
+    payments = db.invoice_payments(window.con, int(row["id"]))
+    sums = invoice_mod.totals(row, lines, payments)
+
+    dialog = PaymentDialog(window, number, sums.balance_cents, row["bill_to_name"])
+    if not dialog.exec():
+        return
+    try:
+        result = invoice_mod.pay(window.con, number, dialog.amount(),
+                                 method=dialog.method(),
+                                 reference=dialog.reference())
+    except invoice_mod.InvoiceError as exc:
+        window.con.rollback()
+        window.error("That payment was not recorded.", str(exc))
+        return
+    window.con.commit()
+
+    if result.settled:
+        window.toast(f"{number} paid in full — "
+                     f"{invoice_mod.money(result.total_cents)}.")
+    else:
+        window.toast(f"{number}: {invoice_mod.money(result.balance_cents)} "
+                     f"still owing.")
+    window.refresh()
+
+
+def void_invoice(window, number: str) -> None:
+    from PySide6.QtWidgets import QInputDialog
+
+    reason, said = QInputDialog.getText(
+        window, "Void this invoice",
+        f"Why is {number} being cancelled?\n"
+        f"It keeps its number and stays in the list — in a year this sentence "
+        f"is the only thing that will explain it.")
+    if not said or not reason.strip():
+        return
+    try:
+        invoice_mod.void(window.con, number, reason)
+    except invoice_mod.InvoiceError as exc:
+        window.con.rollback()
+        window.error("That invoice was not voided.", str(exc))
+        return
+    window.con.commit()
+    window.toast(f"{number} void.")
+    window.refresh()
+
+
+def monthly_run(window) -> None:
+    """This month's invoice for every active client, in one press."""
+    period = invoice_mod.period_of()
+    due = [s for s in db.subscriptions(window.con, status="active")
+           if period not in db.invoiced_periods(window.con, s["place_id"])]
+    if not due:
+        window.toast(f"Everybody is already invoiced for "
+                     f"{invoice_mod.period_label(period)}.")
+        return
+
+    if not window.confirm(
+            "Invoice everyone for this month",
+            f"Raises and issues {len(due)} invoice(s) for "
+            f"{invoice_mod.period_label(period)}.\n\n"
+            f"Nothing is emailed and nothing is charged — the pages are "
+            f"written for you to print or send.\n\n"
+            f"A client who already has an invoice for this month is skipped, "
+            f"so this is safe to press twice.",
+            f"Raise {len(due)}"):
+        return
+
+    result = invoice_mod.run(window.con, window.cfg, period=period)
+    window.con.commit()
+    for number in result.created:
+        _invoice_page(window, number)
+
+    window.refresh()
+    if result.skipped:
+        window.error(
+            f"Raised {len(result.created)}, skipped {len(result.skipped)}.",
+            "\n".join(f"{name}: {why}" for name, why in result.skipped))
+    else:
+        window.toast(f"{len(result.created)} invoice(s) raised — "
+                     f"{invoice_mod.money(result.total_cents)}.")
+    if result.created:
+        _warn_about_paying(window)
 
 
 def sync_billing(window, on_done=None) -> None:

@@ -182,6 +182,81 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_sub_status ON subscriptions(status);
 
+-- Phase 7. Invoices, raised here and printed here.
+--
+-- Money is in integer cents, unlike `subscriptions` above. That table holds an
+-- opinion about a price; this one holds documents that have to add up. A float
+-- subtotal that comes out a cent under the sum of its lines is an argument
+-- with a client, and 0.1 + 0.2 is exactly the sort of thing that causes it.
+--
+-- `bill_to_*` is a snapshot taken when the invoice is raised, not a join. Two
+-- reasons, and both are real: `purge_stale()` blanks a lead's name and address
+-- 30 days after Google gave them to us, and an invoice must say what it said
+-- the day it was sent even after the client moves, renames or is deleted.
+CREATE TABLE IF NOT EXISTS invoices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    number          TEXT NOT NULL UNIQUE,
+    place_id        TEXT NOT NULL,
+    bill_to_name    TEXT NOT NULL,
+    bill_to_address TEXT,
+    bill_to_email   TEXT,
+    -- 'YYYY-MM' when this is a month of somebody's subscription, NULL for a
+    -- one-off. The partial index below is what makes the monthly run safe to
+    -- press twice.
+    period          TEXT,
+    currency        TEXT DEFAULT 'CAD',
+    terms_days      INTEGER DEFAULT 14,
+    -- Copied onto the invoice rather than read from config at print time, so
+    -- reprinting last year's invoice after a rate change reprints last year's
+    -- rate. `tax_number` is our registration; see invoice.tax_from().
+    tax_label       TEXT DEFAULT '',
+    tax_rate        REAL DEFAULT 0,
+    tax_number      TEXT,
+    status          TEXT DEFAULT 'draft',
+    note            TEXT,
+    issued_at       TEXT,
+    due_at          TEXT,
+    created_at      TEXT,
+    sent_at         TEXT,
+    paid_at         TEXT,
+    voided_at       TEXT,
+    void_reason     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_invoice_place ON invoices(place_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_status ON invoices(status);
+-- One live invoice per client per period. Without this, running the monthly
+-- job twice in August bills every client twice, and the operator finds out
+-- when a client rings up about it. Voided invoices are excluded so that a
+-- mistake can be voided and the month raised again.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_period
+    ON invoices(place_id, period)
+    WHERE period IS NOT NULL AND status <> 'void';
+
+CREATE TABLE IF NOT EXISTS invoice_lines (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id   INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    position     INTEGER DEFAULT 0,
+    description  TEXT NOT NULL,
+    quantity     REAL DEFAULT 1,
+    unit_cents   INTEGER NOT NULL,
+    taxable      INTEGER DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_invoice_line ON invoice_lines(invoice_id, position);
+
+-- Payments are rows, not a paid flag, because half of one arrives on Tuesday
+-- and the rest when the job is done. The balance is the arithmetic; the status
+-- follows it.
+CREATE TABLE IF NOT EXISTS invoice_payments (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id   INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    at           TEXT,
+    amount_cents INTEGER NOT NULL,
+    method       TEXT,
+    reference    TEXT,
+    note         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_payment_invoice ON invoice_payments(invoice_id);
+
 -- Geocoding a town costs a call. Same 30-day expiry as everything else from
 -- Google, so re-scanning "Newmarket, ON" this week is free.
 CREATE TABLE IF NOT EXISTS geocache (
@@ -220,6 +295,9 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "market": [],
     "subscriptions": [],
     "scans": [],
+    "invoices": [],
+    "invoice_lines": [],
+    "invoice_payments": [],
 }
 
 
@@ -778,3 +856,228 @@ def record_sync(con: sqlite3.Connection, place_id: str, stripe_status: str) -> N
     con.execute(
         "UPDATE subscriptions SET stripe_status=?, synced_at=? WHERE place_id=?",
         (stripe_status or None, now(), place_id))
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — invoices
+#
+# The store only. Every rule about what an invoice may do — what can still be
+# edited, when tax applies, what a payment does to the status — lives in
+# invoice.py, so the CLI and the app cannot end up enforcing different ones.
+# ---------------------------------------------------------------------------
+INVOICE_STATUS = ["draft", "sent", "paid", "void"]
+
+
+def today() -> str:
+    return datetime.date.today().isoformat()
+
+
+def next_invoice_number(con: sqlite3.Connection, prefix: str = "",
+                        year: Optional[int] = None) -> str:
+    """The next number in this year's run, e.g. "2026-004".
+
+    Sequential and gapless within the year, because that is what a bookkeeper
+    and the CRA both expect to see: a missing number invites the question of
+    what was on it. Nothing is ever deleted to make a gap — a mistake is voided
+    and keeps its number.
+
+    Read-then-increment is only safe because one person runs this on one
+    laptop. The UNIQUE constraint on `number` is the actual guarantee; if two
+    ever raced, the second insert fails loudly rather than issuing a duplicate.
+    """
+    import re
+
+    year = year or datetime.date.today().year
+    pattern = re.compile(rf"^{re.escape(prefix)}{year}-(\d+)$")
+    highest = 0
+    for row in con.execute("SELECT number FROM invoices"):
+        match = pattern.match(row["number"] or "")
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return f"{prefix}{year}-{highest + 1:03d}"
+
+
+def create_invoice(con: sqlite3.Connection, *, number: str, place_id: str,
+                   bill_to_name: str, lines: Sequence[dict[str, Any]],
+                   bill_to_address: str = "", bill_to_email: str = "",
+                   period: Optional[str] = None, currency: str = "CAD",
+                   terms_days: int = 14, tax_label: str = "",
+                   tax_rate: float = 0.0, tax_number: str = "",
+                   note: str = "") -> int:
+    """Insert an invoice and its lines. Returns the row id.
+
+    One transaction: an invoice with no lines on it is a document that says a
+    client owes nothing, and it would be indistinguishable from one that was
+    meant to.
+    """
+    cur = con.execute(
+        """INSERT INTO invoices
+           (number, place_id, bill_to_name, bill_to_address, bill_to_email,
+            period, currency, terms_days, tax_label, tax_rate, tax_number,
+            status, note, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?, 'draft', ?, ?)""",
+        (number, place_id, bill_to_name, bill_to_address or None,
+         bill_to_email or None, period, currency, int(terms_days), tax_label,
+         float(tax_rate), tax_number or None, note or None, now()))
+    invoice_id = int(cur.lastrowid or 0)
+    for position, line in enumerate(lines):
+        add_invoice_line(con, invoice_id, position=position, **line)
+    return invoice_id
+
+
+def add_invoice_line(con: sqlite3.Connection, invoice_id: int, *,
+                     description: str, unit_cents: int, quantity: float = 1.0,
+                     taxable: bool = True, position: Optional[int] = None) -> int:
+    if position is None:
+        row = con.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 AS next FROM invoice_lines "
+            "WHERE invoice_id=?", (invoice_id,)).fetchone()
+        position = int(row["next"])
+    cur = con.execute(
+        """INSERT INTO invoice_lines
+           (invoice_id, position, description, quantity, unit_cents, taxable)
+           VALUES (?,?,?,?,?,?)""",
+        (invoice_id, position, description, float(quantity), int(unit_cents),
+         1 if taxable else 0))
+    return int(cur.lastrowid or 0)
+
+
+def delete_invoice_line(con: sqlite3.Connection, line_id: int) -> None:
+    con.execute("DELETE FROM invoice_lines WHERE id=?", (line_id,))
+
+
+def invoice(con: sqlite3.Connection, number: str) -> Optional[sqlite3.Row]:
+    return con.execute("SELECT * FROM invoices WHERE number=?",
+                       (number,)).fetchone()
+
+
+def invoice_by_id(con: sqlite3.Connection, invoice_id: int) -> Optional[sqlite3.Row]:
+    return con.execute("SELECT * FROM invoices WHERE id=?",
+                       (invoice_id,)).fetchone()
+
+
+def invoice_lines(con: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
+    return con.execute(
+        "SELECT * FROM invoice_lines WHERE invoice_id=? ORDER BY position, id",
+        (invoice_id,)).fetchall()
+
+
+def invoice_payments(con: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
+    return con.execute(
+        "SELECT * FROM invoice_payments WHERE invoice_id=? ORDER BY at, id",
+        (invoice_id,)).fetchall()
+
+
+def invoices(con: sqlite3.Connection, *, place_id: Optional[str] = None,
+             status: Optional[str] = None, year: Optional[int] = None,
+             limit: Optional[int] = None) -> list[sqlite3.Row]:
+    """Invoices, newest first, with the balance already worked out.
+
+    The balance is summed in SQL rather than in a loop of per-invoice queries,
+    because the list page redraws on every refresh and one query is one query
+    whether there are three invoices or three hundred.
+    """
+    q = ["""SELECT i.*,
+                   COALESCE(p.paid_cents, 0) AS paid_cents,
+                   l.name AS lead_name
+            FROM invoices i
+            LEFT JOIN (SELECT invoice_id, SUM(amount_cents) AS paid_cents
+                       FROM invoice_payments GROUP BY invoice_id) p
+                   ON p.invoice_id = i.id
+            LEFT JOIN leads l ON l.place_id = i.place_id
+            WHERE 1=1"""]
+    args: list[Any] = []
+    if place_id:
+        q.append("AND i.place_id = ?")
+        args.append(place_id)
+    if status:
+        q.append("AND i.status = ?")
+        args.append(status)
+    if year:
+        # On the issue date where there is one, so a draft raised in December
+        # and sent in January belongs to the year it was actually billed in.
+        q.append("AND CAST(strftime('%Y', COALESCE(i.issued_at, i.created_at)) "
+                 "AS INTEGER) = ?")
+        args.append(int(year))
+    q.append("ORDER BY i.number DESC")
+    if limit:
+        q.append("LIMIT ?")
+        args.append(int(limit))
+    return con.execute(" ".join(q), args).fetchall()
+
+
+def paid_cents(con: sqlite3.Connection, invoice_id: int) -> int:
+    row = con.execute(
+        "SELECT COALESCE(SUM(amount_cents), 0) AS paid FROM invoice_payments "
+        "WHERE invoice_id=?", (invoice_id,)).fetchone()
+    return int(row["paid"])
+
+
+def set_invoice_status(con: sqlite3.Connection, invoice_id: int, status: str,
+                       **stamps: Any) -> None:
+    if status not in INVOICE_STATUS:
+        raise ValueError(f"Unknown invoice status: {status}. "
+                         f"Use one of {', '.join(INVOICE_STATUS)}")
+    allowed = {"issued_at", "due_at", "sent_at", "paid_at", "voided_at",
+               "void_reason"}
+    unknown = set(stamps) - allowed
+    if unknown:
+        raise ValueError(f"set_invoice_status does not write "
+                         f"{', '.join(sorted(unknown))}")
+    sets = "".join(f", {k}=?" for k in stamps)
+    con.execute(f"UPDATE invoices SET status=?{sets} WHERE id=?",
+                (status, *stamps.values(), invoice_id))
+
+
+def add_payment(con: sqlite3.Connection, invoice_id: int, amount_cents: int, *,
+                method: str = "", reference: str = "", note: str = "",
+                at: Optional[str] = None) -> int:
+    cur = con.execute(
+        """INSERT INTO invoice_payments
+           (invoice_id, at, amount_cents, method, reference, note)
+           VALUES (?,?,?,?,?,?)""",
+        (invoice_id, at or today(), int(amount_cents), method or None,
+         reference or None, note or None))
+    return int(cur.lastrowid or 0)
+
+
+def invoiced_periods(con: sqlite3.Connection, place_id: str) -> set[str]:
+    """Periods this client already has a live invoice for."""
+    return {r["period"] for r in con.execute(
+        "SELECT period FROM invoices "
+        "WHERE place_id=? AND period IS NOT NULL AND status <> 'void'",
+        (place_id,))}
+
+
+def has_invoices(con: sqlite3.Connection, place_id: str) -> bool:
+    """Whether this client has ever been invoiced, voids included.
+
+    Voids count deliberately: the setup fee goes on the first invoice, and a
+    client whose first invoice was raised wrong and voided has still had it —
+    re-raising it should not put the setup fee on a second time.
+    """
+    row = con.execute("SELECT 1 FROM invoices WHERE place_id=? LIMIT 1",
+                      (place_id,)).fetchone()
+    return row is not None
+
+
+def lines_by_invoice(con: sqlite3.Connection,
+                     invoice_ids: Sequence[int]) -> dict[int, list[sqlite3.Row]]:
+    """Every line for a set of invoices, in one query, grouped by invoice.
+
+    So that "what am I owed" is one round trip rather than one per invoice —
+    and, more to the point, so the totals on the Money page can be computed by
+    the same function that prints them onto the paper. A second implementation
+    of the arithmetic in SQL would be a second implementation to keep in step,
+    and the two disagreeing by a cent is the whole thing this module is careful
+    about.
+    """
+    grouped: dict[int, list[sqlite3.Row]] = {int(i): [] for i in invoice_ids}
+    if not grouped:
+        return grouped
+    marks = ",".join("?" * len(grouped))
+    for row in con.execute(
+            f"SELECT * FROM invoice_lines WHERE invoice_id IN ({marks}) "
+            f"ORDER BY position, id", tuple(grouped)):
+        grouped[int(row["invoice_id"])].append(row)
+    return grouped

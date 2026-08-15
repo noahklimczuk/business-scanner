@@ -12,6 +12,10 @@ sites/
 # The operator's dashboard (Phase 6). Every client's revenue is on it.
 board.html
 
+# Invoices (Phase 7). Clients' names, addresses and what they were charged.
+invoices/
+invoices.csv
+
 __pycache__/
 *.py[cod]
 .pytest_cache/

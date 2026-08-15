@@ -178,8 +178,16 @@ def build(con, *, operator: Optional[dict[str, Any]] = None) -> str:
     costs = billing.unit_costs(con)
     live = live_sites(con)
 
+    import invoice as invoice_mod
+
     return env().get_template("board.html").render(
         generated=datetime.datetime.now().strftime("%A %-d %B %Y, %-I:%M%p"),
+        # Money asked for but not yet arrived. On the same page as MRR because
+        # the two answer different questions and the second one is the one that
+        # goes quiet — nothing else in the tool would ever mention an invoice
+        # that has been sitting unpaid since June.
+        owed=invoice_mod.outstanding(con),
+        owed_money=invoice_mod.money,
         operator=operator or {},
         calls=call_list(con),
         pipeline=pipeline(con),

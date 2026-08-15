@@ -28,6 +28,10 @@ def _frozen_paths() -> None:
     os.environ.setdefault("LEADSMITH_DB", os.path.join(beside, "leads.db"))
     os.environ.setdefault("LEADSMITH_CONFIG", os.path.join(beside, "config.json"))
     os.environ.setdefault("LEADSMITH_SITES", os.path.join(beside, "sites"))
+    # Invoices are the same story as the database and for higher stakes: a
+    # written invoice inside the unpacked build would be deleted when the app
+    # closed, and the operator would find out when a client asked for a copy.
+    os.environ.setdefault("LEADSMITH_INVOICES", os.path.join(beside, "invoices"))
 
 
 def selftest() -> int:

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice {{ number }} — {{ bill_to.name }}</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+/* Printed, like the leave-behind, and sized in millimetres for the same
+   reason: paper is the target. Unlike the leave-behind this one does *not*
+   fix its height — an invoice with thirty lines on it is allowed to be two
+   pages, and forcing one page would silently cut the total off the bottom. */
+@page { size: Letter; margin: 16mm 15mm; }
+
+:root {
+  /* Deliberately not design.palette_for(): the client's accent belongs on the
+     client's website. This is the operator's stationery, and an invoice that
+     arrives in a different colour every month looks like it came from a
+     different company every month. */
+  --ink: #16181D;
+  --muted: #61656E;
+  --hairline: #D8DBE0;
+  --surface: #FFFFFF;
+  --sunk: #F4F5F7;
+  --accent: #1F4E8C;
+  --bad: #9B2226;
+  --good: #1B6E3C;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+          system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #E9E9EC; }
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  font-size: 3.5mm;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  /* Without this Chrome prints the stamp and the balance box in grey, and the
+     one thing a client should see at a glance is which of the two it is. */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.sheet {
+  width: 216mm;
+  min-height: 279mm;
+  margin: 8mm auto;
+  padding: 16mm 15mm;
+  background: var(--surface);
+  box-shadow: 0 4mm 12mm rgba(0,0,0,.18);
+}
+
+/* ---------- masthead ---------- */
+.top { display: flex; justify-content: space-between; gap: 10mm; align-items: flex-start; }
+.from-name { font-size: 5.2mm; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+.from-line { font-size: 3.2mm; color: var(--muted); margin: 1mm 0 0; }
+.title { text-align: right; flex: none; }
+.title h1 {
+  font-size: 9mm; font-weight: 700; letter-spacing: -.03em;
+  margin: 0; line-height: 1;
+}
+.title .number { font-size: 4.4mm; font-weight: 600; margin: 2mm 0 0; }
+.stamp {
+  display: inline-block; margin-top: 3mm; padding: 1.4mm 4mm;
+  border: .6mm solid var(--good); color: var(--good);
+  border-radius: 1.5mm; font-size: 3.4mm; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.stamp.void { border-color: var(--muted); color: var(--muted); }
+.stamp.overdue { border-color: var(--bad); color: var(--bad); }
+
+.rule { height: .4mm; background: var(--ink); margin: 7mm 0 6mm; }
+
+/* ---------- who and when ---------- */
+.meta { display: flex; gap: 10mm; margin-bottom: 8mm; }
+.meta > div { flex: 1; }
+.label {
+  font-size: 2.8mm; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 1.5mm;
+}
+.who { font-size: 4mm; font-weight: 600; margin: 0; }
+.who-line { font-size: 3.3mm; color: var(--muted); margin: .8mm 0 0; }
+.dates { display: grid; grid-template-columns: auto auto; gap: 1.2mm 5mm;
+         font-size: 3.3mm; justify-content: start; }
+.dates dt { color: var(--muted); margin: 0; }
+.dates dd { margin: 0; font-weight: 600; }
+.dates dd.late { color: var(--bad); }
+
+/* ---------- the lines ---------- */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  font-size: 2.8mm; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+  text-align: left; padding: 0 0 2mm; border-bottom: .3mm solid var(--hairline);
+}
+th.num, td.num { text-align: right; white-space: nowrap; }
+tbody td { padding: 3mm 0; border-bottom: .2mm solid var(--hairline);
+           vertical-align: top; }
+tbody td.desc { padding-right: 6mm; }
+.qty-note { color: var(--muted); font-size: 3mm; }
+/* A row must not be split across a page break — half a line item with its
+   price on the next sheet is how a total gets queried. */
+tbody tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* ---------- totals ---------- */
+.sums { display: flex; justify-content: flex-end; margin-top: 6mm; }
+.sums table { width: 92mm; }
+.sums td { padding: 1.6mm 0; }
+.sums td.num { font-variant-numeric: tabular-nums; }
+.sums tr.sub td { color: var(--muted); }
+.sums tr.total td {
+  border-top: .4mm solid var(--ink); padding-top: 3mm;
+  font-size: 4.6mm; font-weight: 700;
+}
+.balance {
+  margin-top: 4mm; padding: 4mm 5mm; border-radius: 2mm;
+  background: var(--sunk); border-left: 1.4mm solid var(--accent);
+  display: flex; justify-content: space-between; align-items: baseline; gap: 6mm;
+}
+.balance.paid { border-left-color: var(--good); }
+.balance.late { border-left-color: var(--bad); }
+.balance-label { font-size: 3.4mm; font-weight: 600; margin: 0; }
+.balance-value { font-size: 6mm; font-weight: 700; letter-spacing: -.02em; margin: 0;
+                 font-variant-numeric: tabular-nums; }
+
+/* ---------- payments and how to pay ---------- */
+.block { margin-top: 8mm; break-inside: avoid; page-break-inside: avoid; }
+.pay-grid { display: flex; gap: 8mm; }
+.pay-grid > div { flex: 1; }
+.pay-line { margin: 0 0 1mm; font-size: 3.4mm; }
+.pay-line strong { font-weight: 600; }
+.received { font-size: 3.3mm; margin: 0 0 1mm; color: var(--muted); }
+.note { font-size: 3.3mm; margin: 0; }
+.foot {
+  margin-top: 10mm; padding-top: 4mm; border-top: .2mm solid var(--hairline);
+  font-size: 3mm; color: var(--muted);
+}
+.void-reason { color: var(--bad); font-weight: 600; }
+
+@media print {
+  html, body { background: #fff; }
+  .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="top">
+    <div>
+      <p class="from-name">{{ operator.legal_name or operator.operator_name or 'Leadsmith' }}</p>
+      {% if operator.mailing_address %}
+      <p class="from-line">{{ operator.mailing_address }}</p>
+      {% endif %}
+      <p class="from-line">
+        {% if operator.phone %}{{ operator.phone }}{% endif %}
+        {% if operator.phone and operator.email %} · {% endif %}
+        {% if operator.email %}{{ operator.email }}{% endif %}
+      </p>
+      {% if tax.number %}
+      {# Required on any invoice that charges GST/HST, and the first thing a
+         client's bookkeeper looks for. #}
+      <p class="from-line">{{ tax.label }} No. {{ tax.number }}</p>
+      {% endif %}
+    </div>
+    <div class="title">
+      <h1>Invoice</h1>
+      <p class="number">{{ number }}</p>
+      {% if status == 'void' %}
+      <span class="stamp void">Void</span>
+      {% elif totals.settled and totals.has_payments %}
+      <span class="stamp">Paid</span>
+      {% elif overdue %}
+      <span class="stamp overdue">{{ days_overdue }} day{{ '' if days_overdue == 1 else 's' }} overdue</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="meta">
+    <div>
+      <p class="label">Billed to</p>
+      <p class="who">{{ bill_to.name }}</p>
+      {% if bill_to.address %}<p class="who-line">{{ bill_to.address }}</p>{% endif %}
+      {% if bill_to.email %}<p class="who-line">{{ bill_to.email }}</p>{% endif %}
+    </div>
+    <div>
+      <p class="label">Details</p>
+      <dl class="dates">
+        <dt>Issued</dt><dd>{{ issued }}</dd>
+        {% if due %}
+        <dt>Due</dt><dd class="{{ 'late' if overdue else '' }}">{{ due }}</dd>
+        {% endif %}
+        {% if period %}
+        <dt>Period</dt><dd>{{ period }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="num">Unit</th>
+        <th class="num">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td class="desc">
+          {{ line.description }}
+          {% if line.show_quantity %}
+          <span class="qty-note">× {{ line.quantity }}</span>
+          {% endif %}
+        </td>
+        <td class="num">{{ line.unit }}</td>
+        <td class="num">{{ line.amount }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="sums">
+    <table>
+      <tr class="sub">
+        <td>Subtotal</td>
+        <td class="num">{{ totals.subtotal }}</td>
+      </tr>
+      {% if totals.has_tax %}
+      <tr class="sub">
+        <td>{{ tax.label }} {{ '%g'|format(tax.rate) }}%</td>
+        <td class="num">{{ totals.tax }}</td>
+      </tr>
+      {% endif %}
+      <tr class="total">
+        <td>Total</td>
+        <td class="num">{{ totals.total }}</td>
+      </tr>
+    </table>
+  </div>
+
+  {% if status != 'void' %}
+  <div class="balance {{ 'paid' if totals.settled else ('late' if overdue else '') }}">
+    <p class="balance-label">
+      {% if totals.settled and totals.has_payments %}
+        Paid in full — thank you
+      {% elif overdue %}
+        Balance due — {{ days_overdue }} day{{ '' if days_overdue == 1 else 's' }} past due
+      {% else %}
+        Balance due{% if due %} by {{ due }}{% endif %}
+      {% endif %}
+    </p>
+    <p class="balance-value">{{ totals.balance }}</p>
+  </div>
+  {% if totals.credit_cents %}
+  {# Overpaid. Saying so beats quietly keeping it. #}
+  <p class="received" style="margin-top:2mm">
+    Paid {{ totals.credit }} more than the total — that is sitting as a credit
+    against the next invoice.
+  </p>
+  {% endif %}
+  {% endif %}
+
+  {% if status == 'void' %}
+  <div class="block">
+    <p class="label">Void</p>
+    <p class="note void-reason">This invoice was cancelled: {{ void_reason }}</p>
+    <p class="note">Nothing is owed on it. It is kept, with its number, so the
+      numbering has no gaps in it.</p>
+  </div>
+  {% endif %}
+
+  {% if payments %}
+  <div class="block">
+    <p class="label">Payments received</p>
+    {% for payment in payments %}
+    <p class="received">
+      {{ payment.at }} — {{ payment.amount }}{% if payment.method %} by {{ payment.method }}{% endif %}
+      {%- if payment.reference %} · {{ payment.reference }}{% endif %}
+    </p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if status != 'void' and not totals.settled and (pay_to.e_transfer or pay_to.cheque) %}
+  <div class="block">
+    <p class="label">How to pay</p>
+    <div class="pay-grid">
+      {% if pay_to.e_transfer %}
+      <div>
+        <p class="pay-line"><strong>Interac e-Transfer</strong></p>
+        <p class="pay-line">{{ pay_to.e_transfer }}</p>
+        <p class="pay-line" style="color:var(--muted)">Please put {{ number }} in the message.</p>
+      </div>
+      {% endif %}
+      {% if pay_to.cheque %}
+      <div>
+        <p class="pay-line"><strong>Cheque</strong></p>
+        <p class="pay-line">Payable to {{ pay_to.cheque }}</p>
+        {% if pay_to.address %}<p class="pay-line" style="color:var(--muted)">{{ pay_to.address }}</p>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if note %}
+  <div class="block">
+    <p class="label">Note</p>
+    <p class="note">{{ note }}</p>
+  </div>
+  {% endif %}
+
+  <p class="foot">
+    {% if footer %}{{ footer }}<br>{% endif %}
+    Invoice {{ number }} · {{ bill_to.name }} · printed {{ printed }}
+  </p>
+
+</div>
+</body>
+</html>

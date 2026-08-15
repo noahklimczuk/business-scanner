@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 import billing
 import db
+import invoice as invoice_mod
 from gui.pages import Page
 from gui.widgets import Banner, Card, Figure, button, muted, row
 
@@ -37,8 +38,12 @@ class MoneyPage(Page):
         self.average = Figure("$0", "Average each")
         self.spend = Figure("$0.00", "API cost, 30 days")
         self.margin = Figure("$0", "MRR less cost")
+        # What they are worth is not what has arrived. A client can be worth
+        # $149 a month and owe four of them, and only one of those two numbers
+        # pays for anything — so the money owed sits next to the money earned.
+        self.owed = Figure("$0", "Owed on invoices")
         for figure in (self.mrr, self.arr, self.clients, self.average,
-                       self.spend, self.margin):
+                       self.spend, self.margin, self.owed):
             figures.addWidget(figure)
         figures.addStretch(1)
         summary.add_layout(figures)
@@ -81,6 +86,8 @@ class MoneyPage(Page):
         self.average.set_value(f"${money.average:,.0f}")
         self.spend.set_value(f"${total_cost:,.2f}")
         self.margin.set_value(f"${money.mrr - total_cost:,.0f}")
+        owed = invoice_mod.outstanding(self.con)
+        self.owed.set_value(invoice_mod.money(owed.outstanding_cents))
 
         active = [dict(r) for r in rows if r["status"] == "active"]
         self.empty.setVisible(not active)
