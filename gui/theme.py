@@ -58,6 +58,13 @@ def palette_for(dark: bool) -> Palette:
     return DARK if dark else LIGHT
 
 
+# The palette currently on screen. Set by `apply()`, so the rare widget that
+# has to name a colour in Python — a table cell Qt paints itself, where a
+# stylesheet cannot reach — takes it from the same two palettes everything
+# else does, and inherits the contrast the tests hold those to.
+CURRENT: Palette = LIGHT
+
+
 def stylesheet(p: Palette) -> str:
     """The whole application's styling, as one Qt stylesheet.
 
@@ -237,7 +244,8 @@ def apply(app, dark: bool) -> Palette:
     """
     from PySide6.QtGui import QColor, QPalette
 
-    p = palette_for(dark)
+    global CURRENT
+    p = CURRENT = palette_for(dark)
     q = QPalette()
     q.setColor(QPalette.Window, QColor(p.bg))
     q.setColor(QPalette.WindowText, QColor(p.ink))

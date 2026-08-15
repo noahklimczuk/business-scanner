@@ -40,9 +40,9 @@ leadsmith-app = "leadsmith_app:main"
 [tool.setuptools]
 include-package-data = true
 py-modules = ["billing", "board", "cli", "config", "db", "deploy", "design",
-              "enrich", "generate", "hours", "leadsmith_app", "offboard",
-              "pitch", "prospect", "qr", "search", "update", "version",
-              "visuals"]
+              "enrich", "generate", "hours", "invoice", "leadsmith_app",
+              "offboard", "pitch", "prospect", "qr", "search", "startup",
+              "update", "version", "visuals"]
 packages = ["gui", "gui.pages"]
 
 [tool.setuptools.dynamic]

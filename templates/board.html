@@ -116,7 +116,19 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var
         <div class="figure-value {{ 'good' if margin > 0 else 'muted' }}">${{ "{:,.0f}".format(margin) }}</div>
         <div class="figure-label">MRR less cost</div>
       </div>
+      <div>
+        {# What has been billed and not paid. MRR is what they are worth;
+           this is what they owe, and it is the one that goes quiet. #}
+        <div class="figure-value {{ 'bad' if owed.overdue_cents else '' }}">{{ owed_money(owed.outstanding_cents) }}</div>
+        <div class="figure-label">Owed on invoices</div>
+      </div>
     </div>
+    {% if owed.overdue_count %}
+    <p class="note bad">
+      {{ owed.overdue_count }} invoice(s) past due — {{ owed_money(owed.overdue_cents) }}
+      outstanding, oldest {{ owed.oldest }}.
+    </p>
+    {% endif %}
     {% if money.cancelled or money.paused %}
     <p class="note">
       {{ money.cancelled }} cancelled, {{ money.paused }} paused.

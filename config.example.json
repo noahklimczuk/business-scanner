@@ -21,6 +21,18 @@
     "home_city": "Newmarket, ON"
   },
 
+  "//invoicing": "Invoices are raised and printed by this tool and paid however you and the client already agreed — there is no service behind it. tax_rate is only charged once tax_number is filled in: you may not collect GST/HST unless you are registered, and most people under $30k a year are not. Fill in at least one of e_transfer_email or cheque_payable_to, or the invoice prints with no way to pay it.",
+  "invoicing": {
+    "prefix": "",
+    "terms_days": 14,
+    "tax_label": "HST",
+    "tax_rate": 13,
+    "tax_number": "",
+    "e_transfer_email": "",
+    "cheque_payable_to": "",
+    "footer": ""
+  },
+
   "pricing": {
     "standard_setup": 1200,
     "standard_monthly": 60,

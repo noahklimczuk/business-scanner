@@ -8,6 +8,7 @@ divides by zero, a signal wired to a method that was renamed.
 These skip cleanly when PySide6 is not installed, so the CLI-only checkout is
 unaffected.
 """
+import datetime
 import os
 import time
 
@@ -24,9 +25,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QLabel              # noqa: E402
 
+import config                                                   # noqa: E402
 import db                                                       # noqa: E402
 import design                                                   # noqa: E402
+import invoice as invoice_mod                                   # noqa: E402
 from gui import theme                                           # noqa: E402
+from gui.pages.invoices import InvoicesPage                     # noqa: E402
+from gui.pages.settings import SettingsPage                     # noqa: E402
 from gui.work import Job, Runner, _human                        # noqa: E402
 from types import SimpleNamespace                               # noqa: E402
 
@@ -64,6 +69,14 @@ def no_update_check(monkeypatch):
 def window(app, tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "gui.db"))
     monkeypatch.setenv("LEADSMITH_CONFIG", str(tmp_path / "config.json"))
+    # The environment variable on its own is not enough. `config.CONFIG_PATH`
+    # is resolved when the module is first imported, so whether setenv reaches
+    # it depends on which test happened to import config first — and on the
+    # day it does not, `settings.save()` writes over the developer's own
+    # config.json, API keys and all. Patch the resolved path as well, and the
+    # directory invoices are written to for the same reason.
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(invoice_mod, "INVOICES_DIR", str(tmp_path / "invoices"))
     theme.apply(app, dark=True)
     from gui.app import Window
     win = Window()
@@ -164,7 +177,7 @@ def test_only_one_job_runs_at_a_time(app):
 # The window
 # ---------------------------------------------------------------------------
 def test_every_page_builds_against_an_empty_database(window, app):
-    assert window.stack.count() == 6
+    assert window.stack.count() == 7
     for index in range(window.stack.count()):
         window.go(index)
         app.processEvents()
@@ -256,13 +269,13 @@ def test_settings_never_shows_a_placeholder_as_if_it_were_a_key(window, app):
     import config
     config.save({"google_api_key": "PASTE_YOUR_PLACES_API_KEY_HERE"},
                 os.environ["LEADSMITH_CONFIG"])
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.refresh()
     assert settings.google.text() == ""
 
 
 def test_settings_round_trips_through_disk(window, app):
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.google.set_text("AIzaTest")
     settings.operator.set_text("Noah")
     settings.nmd_monthly.set_text("199")
@@ -276,7 +289,7 @@ def test_settings_round_trips_through_disk(window, app):
 
 
 def test_settings_refuses_a_price_with_a_dollar_sign(window, app):
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.google.set_text("AIzaTest")
     settings.nmd_monthly.set_text("$199")
     settings.save()
@@ -292,12 +305,28 @@ def test_the_frozen_build_keeps_its_data_beside_the_executable(monkeypatch, tmp_
     import leadsmith_app
     monkeypatch.setattr("sys.frozen", True, raising=False)
     monkeypatch.setattr("sys.executable", str(tmp_path / "Leadsmith.exe"))
-    for name in ("LEADSMITH_DB", "LEADSMITH_CONFIG", "LEADSMITH_SITES"):
+    for name in ("LEADSMITH_DB", "LEADSMITH_CONFIG", "LEADSMITH_SITES",
+                 "LEADSMITH_INVOICES"):
         monkeypatch.delenv(name, raising=False)
 
     leadsmith_app._frozen_paths()
     assert os.path.dirname(os.environ["LEADSMITH_DB"]) == str(tmp_path)
     assert os.path.dirname(os.environ["LEADSMITH_CONFIG"]) == str(tmp_path)
+    # Invoices for the same reason and higher stakes: written inside the
+    # unpacked build, they would be gone when the app closed, and the operator
+    # would find out when a client asked for a copy.
+    assert os.path.dirname(os.environ["LEADSMITH_INVOICES"]) == str(tmp_path)
+
+
+def test_every_module_the_app_imports_is_packaged():
+    """`py-modules` is a hand-written list, and a flat-file layout means an
+    omission is only found when a non-editable install crashes on import."""
+    import tomllib
+    with open("pyproject.toml", "rb") as fh:
+        declared = set(tomllib.load(fh)["tool"]["setuptools"]["py-modules"])
+    on_disk = {name[:-3] for name in os.listdir(".")
+               if name.endswith(".py") and name not in ("conftest.py",)}
+    assert on_disk - declared == set(), "a module exists but is not packaged"
 
 
 def test_the_spec_ships_the_templates_the_app_reads_at_runtime():
@@ -360,7 +389,7 @@ def test_the_exe_launch_check_actually_waits_for_the_exe():
 # Choosing who writes the copy
 # ---------------------------------------------------------------------------
 def test_the_copywriter_choice_round_trips_through_disk(window, app):
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.google.set_text("AIzaTest")
     settings.provider.setCurrentIndex(settings.provider.findData("gemini"))
     settings.copy_key.set_text("AIzaGeminiKey")
@@ -404,8 +433,8 @@ def test_checking_a_key_does_not_wipe_what_was_typed(window, app, monkeypatch):
     import generate
     monkeypatch.setattr(generate, "list_models", lambda spec: ["gemini-2.5-flash"])
 
-    settings = window.pages[5]
-    window.go(5)
+    settings = window.pages[window.page_index(SettingsPage)]
+    window.go(window.page_index(SettingsPage))
     settings.provider.setCurrentIndex(settings.provider.findData("gemini"))
     settings.copy_key.set_text("AIzaGeminiKey")
     settings.google.set_text("AIzaPlacesKey")
@@ -426,7 +455,7 @@ def test_unsaved_settings_survive_a_refresh_but_not_a_reload(window, app):
     Reload is the operator asking for the saved values back, so it is the one
     place discarding what they typed is what they meant.
     """
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.google.set_text("AIzaTest")
     settings.provider.setCurrentIndex(settings.provider.findData("gemini"))
     settings.copy_key.set_text("AIzaGeminiKey")
@@ -436,7 +465,7 @@ def test_unsaved_settings_survive_a_refresh_but_not_a_reload(window, app):
     settings.copy_key.set_text("gsk_unsaved")
 
     window.go(0)
-    window.go(5)
+    window.go(window.page_index(SettingsPage))
     app.processEvents()
     assert settings.provider.currentData() == "groq"
     assert settings.copy_key.text() == "gsk_unsaved"
@@ -450,7 +479,7 @@ def test_unsaved_settings_survive_a_refresh_but_not_a_reload(window, app):
 
 
 def test_a_custom_service_needs_an_address_before_it_will_save(window, app):
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.google.set_text("AIzaTest")
     settings.provider.setCurrentIndex(settings.provider.findData("custom"))
     settings.copy_key.set_text("some-key")
@@ -462,7 +491,7 @@ def test_a_custom_service_needs_an_address_before_it_will_save(window, app):
 def test_a_custom_service_cannot_be_saved_without_an_address(window, app):
     """Saving one produces a config that can only fail later, in the middle of
     building a client's site."""
-    settings = window.pages[5]
+    settings = window.pages[window.page_index(SettingsPage)]
     settings.google.set_text("AIzaTest")
     settings.provider.setCurrentIndex(settings.provider.findData("custom"))
     settings.copy_key.set_text("")          # no key either — still not saveable
@@ -988,10 +1017,256 @@ def test_a_tampered_download_leaves_the_working_build_alone(window, app,
 
 def test_settings_says_which_version_this_is(window, app):
     import update
-    settings = window.pages[5]
-    window.go(5)
+    settings = window.pages[window.page_index(SettingsPage)]
+    window.go(window.page_index(SettingsPage))
     app.processEvents()
     assert update.VERSION in settings.version_note.text()
+
+
+# ---------------------------------------------------------------------------
+# Invoicing
+#
+# The page and the two dialogs, against a real database. The arithmetic itself
+# is covered in test_invoice.py; what is worth testing here is the part that
+# only breaks when a widget meets data — a dialog prefilled from a plan that
+# does not exist, a table drawn from an invoice with no due date, and the two
+# buttons that move money.
+# ---------------------------------------------------------------------------
+INVOICE_CFG = {"invoicing": {"tax_number": "80012 3456 RT0001", "tax_rate": 13,
+                             "tax_label": "HST", "e_transfer_email": "pay@example.ca"},
+               "business": {"legal_name": "N. Klimczuk o/a Leadsmith"}}
+
+
+def _client(window, place_id="g1", name="Halstead Roofing", monthly=149.0,
+            setup=0.0):
+    db.upsert_lead(window.con, {"place_id": place_id, "name": name,
+                                "category": "Roofing contractor",
+                                "address": "1 Main St, Newmarket, ON",
+                                "website_kind": "none"})
+    db.set_subscription(window.con, place_id, plan="no-money-down",
+                        monthly=monthly, setup_fee=setup)
+    window.cfg.update(INVOICE_CFG)
+    window.con.commit()
+    return place_id
+
+
+def _invoices_page(window, app):
+    index = window.page_index(InvoicesPage)
+    window.go(index)
+    app.processEvents()
+    return window.pages[index]
+
+
+def test_the_invoices_page_says_what_to_do_when_there_are_none(window, app):
+    page = _invoices_page(window, app)
+    assert page.empty.isVisibleTo(page)
+    assert page.table.rowCount() == 0
+    assert page.outstanding.value.text() == "$0.00"
+
+
+def test_an_issued_invoice_shows_up_owing(window, app):
+    place = _client(window)
+    number = invoice_mod.create(window.con, place, [
+        {"description": "Month", "unit_cents": 14900, "quantity": 1.0,
+         "taxable": True}], cfg=window.cfg)
+    invoice_mod.send(window.con, number)
+    window.con.commit()
+
+    page = _invoices_page(window, app)
+    assert page.table.rowCount() == 1
+    assert page.table.item(0, 0).text() == number
+    assert page.table.item(0, 1).text() == "Halstead Roofing"
+    assert page.table.item(0, 4).text() == "$168.37"        # 149 + HST
+    assert page.table.item(0, 5).text() == "$168.37"
+    assert page.outstanding.value.text() == "$168.37"
+
+
+def test_an_overdue_invoice_is_said_out_loud_and_not_only_in_red(window, app):
+    place = _client(window)
+    number = invoice_mod.create(window.con, place, [
+        {"description": "Month", "unit_cents": 14900, "quantity": 1.0,
+         "taxable": True}], cfg=window.cfg)
+    invoice_mod.send(window.con, number, today=datetime.date(2020, 1, 1))
+    window.con.commit()
+
+    page = _invoices_page(window, app)
+    # Colour is not a signal on its own — the row has to say it in words.
+    assert "late" in page.table.item(0, 6).text()
+    assert page.banner.isVisibleTo(page)
+    assert number in page.banner.label.text()
+
+
+def test_a_paid_invoice_stops_counting_as_owed(window, app):
+    place = _client(window)
+    number = invoice_mod.create(window.con, place, [
+        {"description": "Month", "unit_cents": 10000, "quantity": 1.0,
+         "taxable": False}], cfg=window.cfg)
+    invoice_mod.send(window.con, number)
+    invoice_mod.pay(window.con, number, "100")
+    window.con.commit()
+
+    page = _invoices_page(window, app)
+    assert page.table.item(0, 6).text() == "paid"
+    assert page.table.item(0, 5).text() == "—"
+    assert page.outstanding.value.text() == "$0.00"
+    assert page.collected.value.text() == "$100.00"
+
+
+def test_the_money_page_shows_what_has_been_billed_and_not_paid(window, app):
+    place = _client(window)
+    number = invoice_mod.create(window.con, place, [
+        {"description": "Month", "unit_cents": 14900, "quantity": 1.0,
+         "taxable": False}], cfg=window.cfg)
+    invoice_mod.send(window.con, number)
+    window.con.commit()
+
+    from gui.pages.money import MoneyPage
+    index = window.page_index(MoneyPage)
+    window.go(index)
+    app.processEvents()
+    assert window.pages[index].owed.value.text() == "$149.00"
+
+
+# -- the dialog --------------------------------------------------------------
+def _dialog(window, place_id=""):
+    from gui.dialogs import InvoiceDialog
+    return InvoiceDialog(window, window.con, window.cfg, place_id)
+
+
+def test_the_new_invoice_dialog_starts_from_what_they_pay(window, app):
+    _client(window, monthly=60, setup=1200)
+    dialog = _dialog(window)
+
+    assert dialog.table.rowCount() == 2                  # setup, then the month
+    assert dialog.table.item(0, 2).text() == "1200.00"
+    assert "Website hosting and care" in dialog.table.item(1, 0).text()
+    # 1260 + 13%, worked out the same way the printed page will.
+    assert "$1,423.80" in dialog.total.text()
+
+
+def test_the_dialog_offers_nobody_who_has_not_bought_anything(window, app):
+    # Picking a client out of four hundred strangers from the scan is not a
+    # picker, it is a search problem.
+    db.upsert_lead(window.con, {"place_id": "cold", "name": "Cold Lead",
+                                "category": "Roofing", "website_kind": "none"})
+    _client(window)
+    dialog = _dialog(window)
+
+    labels = [dialog.clients.itemText(i) for i in range(dialog.clients.count())]
+    assert any("Halstead" in label for label in labels)
+    assert not any("Cold Lead" in label for label in labels)
+
+
+def test_a_price_with_nothing_to_say_what_it_is_for_is_refused(window, app):
+    from PySide6.QtWidgets import QTableWidgetItem
+    _client(window)
+    dialog = _dialog(window)
+    dialog.table.setItem(0, 0, QTableWidgetItem(""))
+    dialog.table.setItem(0, 2, QTableWidgetItem("250"))
+
+    dialog.save()
+    assert dialog.problem.isVisibleTo(dialog)
+    assert "the client reads" in dialog.problem.text().lower()
+    assert not dialog.result(), "the dialog accepted an invoice it had rejected"
+
+
+def test_a_client_with_no_plan_still_gets_an_empty_line_to_fill_in(window, app):
+    db.upsert_lead(window.con, {"place_id": "sold1", "name": "Sold, no plan",
+                                "category": "Roofing", "website_kind": "none"})
+    db.set_stage(window.con, "sold1", "sold")
+    window.con.commit()
+    dialog = _dialog(window, "sold1")
+
+    assert dialog.table.rowCount() == 1
+    assert dialog.total.text() == "—"
+
+
+def test_raising_one_from_the_app_issues_it_and_writes_the_page(
+        window, app, monkeypatch, tmp_path):
+    place = _client(window)
+    monkeypatch.setattr(invoice_mod, "INVOICES_DIR", str(tmp_path))
+    opened = []
+    monkeypatch.setattr("gui.actions.open_path", opened.append)
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    from gui import actions
+    from gui.dialogs import InvoiceDialog
+    monkeypatch.setattr(InvoiceDialog, "exec", lambda self: self.save() or 1)
+    number = actions.new_invoice(window, place)
+
+    assert number and db.invoice(window.con, number)["status"] == "sent"
+    assert os.path.exists(invoice_mod.path_for(number, str(tmp_path)))
+    assert opened, "the invoice was raised and never put in front of anyone"
+
+
+def test_recording_a_payment_settles_it(window, app, monkeypatch):
+    place = _client(window)
+    number = invoice_mod.create(window.con, place, [
+        {"description": "Month", "unit_cents": 14900, "quantity": 1.0,
+         "taxable": False}], cfg=window.cfg)
+    invoice_mod.send(window.con, number)
+    window.con.commit()
+
+    from gui import actions
+    from gui.dialogs import PaymentDialog
+    monkeypatch.setattr(PaymentDialog, "exec", lambda self: 1)
+    actions.record_payment(window, number)
+
+    assert db.invoice(window.con, number)["status"] == "paid"
+    assert "paid in full" in window.status.text().lower()
+
+
+def test_a_part_payment_says_what_is_left(window, app, monkeypatch):
+    place = _client(window)
+    number = invoice_mod.create(window.con, place, [
+        {"description": "Month", "unit_cents": 20000, "quantity": 1.0,
+         "taxable": False}], cfg=window.cfg)
+    invoice_mod.send(window.con, number)
+    window.con.commit()
+
+    from gui import actions
+    from gui.dialogs import PaymentDialog
+    monkeypatch.setattr(PaymentDialog, "exec", lambda self: 1)
+    monkeypatch.setattr(PaymentDialog, "amount", lambda self: "50")
+    actions.record_payment(window, number)
+
+    assert db.invoice(window.con, number)["status"] == "sent"
+    assert "$150.00" in window.status.text()
+
+
+def test_the_monthly_run_bills_everyone_once(window, app, monkeypatch, tmp_path):
+    _client(window, "g1", "Halstead Roofing", monthly=149)
+    _client(window, "g2", "Second Client", monthly=60)
+    monkeypatch.setattr(invoice_mod, "INVOICES_DIR", str(tmp_path))
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: True)
+
+    from gui import actions
+    actions.monthly_run(window)
+    assert len(db.invoices(window.con)) == 2
+
+    # Pressed again in the same month: nothing, and nobody is billed twice.
+    actions.monthly_run(window)
+    assert len(db.invoices(window.con)) == 2
+    assert "already invoiced" in window.status.text()
+
+
+def test_the_operator_is_told_when_the_invoice_has_no_way_to_pay_it(
+        window, app, monkeypatch, tmp_path):
+    place = _client(window)
+    window.cfg["invoicing"] = {"tax_number": "", "e_transfer_email": "",
+                               "cheque_payable_to": ""}
+    monkeypatch.setattr(invoice_mod, "INVOICES_DIR", str(tmp_path))
+    monkeypatch.setattr("gui.actions.open_path", lambda path: None)
+    monkeypatch.setattr(window, "confirm", lambda *a, **k: False)
+    shown = []
+    monkeypatch.setattr(window, "error", lambda *a, **k: shown.append(a))
+
+    from gui import actions
+    from gui.dialogs import InvoiceDialog
+    monkeypatch.setattr(InvoiceDialog, "exec", lambda self: self.save() or 1)
+    actions.new_invoice(window, place)
+
+    assert shown and "no way to pay" in shown[0][0].lower()
 
 
 # ---------------------------------------------------------------------------

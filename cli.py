@@ -18,6 +18,7 @@ import db
 import deploy
 import enrich as enrich_mod
 import generate as generate_mod
+import invoice as invoice_mod
 import offboard
 import pitch
 import prospect
@@ -989,6 +990,395 @@ def export(
     console.print("[dim]  Contains the site, their words, and a plain-English "
                   "sheet for whoever they hire next.[/dim]")
     console.print("[dim]  Not included: our pricing, or the rejected-copy log.[/dim]")
+    con.close()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — invoicing
+#
+# A sub-command group rather than eight more top-level verbs, because `pay` and
+# `void` on their own would read as things you do to a lead.
+# ---------------------------------------------------------------------------
+invoices = typer.Typer(no_args_is_help=True,
+                       help="Raise, print and settle invoices. No API, no "
+                            "account, no percentage.")
+app.add_typer(invoices, name="invoice")
+
+
+def _invoice_or_fail(con, number: str):
+    row = db.invoice(con, number)
+    if row is None:
+        _fail(f"There is no invoice {number}. Try: leadsmith invoice list")
+    return row
+
+
+def _print_invoice(con, row, cfg) -> None:
+    """The invoice as the operator needs to see it in a terminal."""
+    lines = db.invoice_lines(con, int(row["id"]))
+    payments = db.invoice_payments(con, int(row["id"]))
+    sums = invoice_mod.totals(row, lines, payments)
+
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("to", row["bill_to_name"])
+    t.add_row("status", _status_markup(row, sums))
+    if row["issued_at"]:
+        t.add_row("issued", row["issued_at"])
+    if row["due_at"]:
+        t.add_row("due", row["due_at"])
+    if row["period"]:
+        t.add_row("period", invoice_mod.period_label(row["period"]))
+    console.print(Panel(t, title=f"invoice {row['number']}",
+                        border_style="green", expand=False))
+
+    items = Table(box=None, pad_edge=False)
+    items.add_column("what")
+    items.add_column("amount", justify="right")
+    for line in lines:
+        label = line["description"]
+        if float(line["quantity"]) != 1.0:
+            label += f"  [dim]× {line['quantity']:g}[/dim]"
+        items.add_row(label,
+                      invoice_mod.money(invoice_mod.line_cents(
+                          line["quantity"], line["unit_cents"])))
+    items.add_row("[dim]subtotal[/dim]", invoice_mod.money(sums.subtotal_cents))
+    if sums.tax_cents or row["tax_rate"]:
+        items.add_row(f"[dim]{row['tax_label']} {row['tax_rate']:g}%[/dim]",
+                      invoice_mod.money(sums.tax_cents))
+    items.add_row("[bold]total[/bold]",
+                  f"[bold]{invoice_mod.money(sums.total_cents, row['currency'])}[/bold]")
+    if payments:
+        items.add_row("[dim]paid[/dim]", invoice_mod.money(sums.paid_cents))
+        items.add_row("[bold]balance[/bold]",
+                      f"[bold]{invoice_mod.money(sums.balance_cents)}[/bold]")
+    console.print(items)
+
+
+def _status_markup(row, sums) -> str:
+    if row["status"] == "void":
+        return f"[dim]void — {row['void_reason'] or 'no reason recorded'}[/dim]"
+    if row["status"] == "paid":
+        return "[green]paid[/green]"
+    if invoice_mod.is_overdue(row, sums.balance_cents):
+        return f"[red]{invoice_mod.days_overdue(row)} days overdue[/red]"
+    return row["status"]
+
+
+def _write_and_report(con, number: str, cfg, open_after: bool) -> str:
+    """Render the page, say where it is, and say what is missing from it."""
+    html = invoice_mod.render(con, number, operator=cfg.get("business", {}), cfg=cfg)
+    path = invoice_mod.write(number, html)
+    console.print(f"[dim]  page[/dim]  {path}")
+    console.print("[dim]  open it, then print to PDF or hand it over.[/dim]")
+
+    settings = invoice_mod.settings_from(cfg)
+    if not (settings["e_transfer_email"] or settings["cheque_payable_to"]):
+        console.print("[yellow]  no way to pay is printed on it.[/yellow] "
+                      "[dim]Set invoicing.e_transfer_email or "
+                      "invoicing.cheque_payable_to in config.json.[/dim]")
+    if open_after:
+        import webbrowser
+        webbrowser.open("file://" + os.path.abspath(path))
+    return path
+
+
+@invoices.command("new")
+def invoice_new(
+    place_id: str,
+    line: list[str] = typer.Option([], "--line", "-l",
+                                   help='"What it is for:amount", repeatable. '
+                                        'e.g. --line "Extra page:250"'),
+    from_plan: bool = typer.Option(False, "--from-plan",
+                                   help="Use what they pay: setup fee (first "
+                                        "invoice only) and one month."),
+    period: Optional[str] = typer.Option(None, "--period",
+                                         help="YYYY-MM, for a month of their "
+                                              "plan. Refuses to bill it twice."),
+    name: str = typer.Option("", "--name", help="Override the business name."),
+    email: str = typer.Option("", "--email", help="Where to send it."),
+    note: str = typer.Option("", "--note", help="A line the client will read."),
+    due_days: Optional[int] = typer.Option(None, "--due-days",
+                                           help="Payment terms. Default 14."),
+    draft: bool = typer.Option(False, "--draft",
+                               help="Raise it without issuing it yet."),
+    open_after: bool = typer.Option(False, "--open", help="Open it in a browser."),
+) -> None:
+    """Raise an invoice against a client, and print it.
+
+    Issued straight away unless you ask for a draft: an invoice sitting
+    unissued is one nobody is going to pay.
+    """
+    con = db.connect()
+    cfg = config.load()
+    lead = _lead_for(con, place_id)
+
+    items: list[dict] = []
+    if from_plan or period:
+        sub = db.subscription(con, place_id)
+        if sub is None:
+            _fail(f"{lead['name']} has no plan recorded, so there is nothing "
+                  f"to bill from. Run: leadsmith bill {place_id} <plan>")
+            return
+        items += invoice_mod.subscription_lines(
+            con, sub, period or invoice_mod.period_of())
+    try:
+        items += [invoice_mod.parse_line(text) for text in line]
+    except invoice_mod.InvoiceError as exc:
+        _fail(str(exc))
+        return
+
+    try:
+        number = invoice_mod.create(con, place_id, items, cfg=cfg, period=period,
+                                    note=note, bill_to_name=name,
+                                    bill_to_email=email, terms_days=due_days)
+        if not draft:
+            invoice_mod.send(con, number)
+    except invoice_mod.InvoiceError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+
+    row = db.invoice(con, number)
+    _print_invoice(con, row, cfg)
+    if draft:
+        console.print(f"[dim]  draft — issue it with: leadsmith invoice send "
+                      f"{number}[/dim]")
+    else:
+        _write_and_report(con, number, cfg, open_after)
+    con.close()
+
+
+@invoices.command("list")
+def invoice_list(
+    client: Optional[str] = typer.Option(None, "--client", help="One place_id."),
+    status: Optional[str] = typer.Option(None, "--status",
+                                         help=f"One of: {', '.join(db.INVOICE_STATUS)}"),
+    year: Optional[int] = typer.Option(None, "--year"),
+    outstanding: bool = typer.Option(False, "--outstanding",
+                                     help="Only what is unpaid."),
+) -> None:
+    """Every invoice, newest first, and what is still owed on it."""
+    con = db.connect()
+    rows = db.invoices(con, place_id=client, status=status, year=year)
+    grouped = db.lines_by_invoice(con, [int(r["id"]) for r in rows])
+
+    table = Table(box=None, pad_edge=False)
+    table.add_column("number")
+    table.add_column("client")
+    table.add_column("issued", style="dim")
+    table.add_column("total", justify="right")
+    table.add_column("balance", justify="right")
+    table.add_column("status")
+
+    shown = 0
+    for row in rows:
+        sums = invoice_mod.totals(row, grouped.get(int(row["id"]), []))
+        sums.paid_cents = int(row["paid_cents"] or 0)
+        if outstanding and (row["status"] != "sent" or sums.balance_cents <= 0):
+            continue
+        shown += 1
+        # Nothing is owed on a void or on something already paid, and printing
+        # a balance beside either reads as a debt that is not there.
+        owing = (invoice_mod.money(sums.balance_cents)
+                 if row["status"] == "sent" and sums.balance_cents > 0 else "—")
+        table.add_row(
+            row["number"], row["bill_to_name"], row["issued_at"] or "—",
+            invoice_mod.money(sums.total_cents), owing,
+            _status_markup(row, sums))
+
+    if not shown:
+        console.print("[dim]No invoices yet. Raise one: leadsmith invoice new "
+                      "<place_id> --from-plan[/dim]")
+        con.close()
+        return
+    console.print(table)
+
+    owed = invoice_mod.outstanding(con)
+    if owed.outstanding_cents:
+        line = (f"\n  owed: [bold]{invoice_mod.money(owed.outstanding_cents)}[/bold] "
+                f"across {owed.open_count} invoice(s)")
+        if owed.overdue_cents:
+            line += (f" · [red]{invoice_mod.money(owed.overdue_cents)} overdue"
+                     f"[/red] (oldest {owed.oldest})")
+        console.print(line)
+    con.close()
+
+
+@invoices.command("show")
+def invoice_show(
+    number: str,
+    open_after: bool = typer.Option(False, "--open", help="Open the page."),
+) -> None:
+    """One invoice, and re-print its page."""
+    con = db.connect()
+    cfg = config.load()
+    row = _invoice_or_fail(con, number)
+    _print_invoice(con, row, cfg)
+    if row["status"] != "draft":
+        _write_and_report(con, number, cfg, open_after)
+    else:
+        console.print(f"[dim]  draft — issue it with: leadsmith invoice send "
+                      f"{number}[/dim]")
+    con.close()
+
+
+@invoices.command("send")
+def invoice_send(
+    number: str,
+    open_after: bool = typer.Option(True, "--open/--no-open",
+                                    help="Open it in a browser."),
+) -> None:
+    """Issue a draft: set the date, start the clock, print the page.
+
+    Nothing is emailed. The page is yours to hand over, print, or attach —
+    which is the whole reason this exists without an account behind it.
+    """
+    con = db.connect()
+    cfg = config.load()
+    try:
+        row = invoice_mod.send(con, number)
+    except invoice_mod.InvoiceError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+
+    console.print(f"[green]{row['number']}[/green] issued {row['issued_at']} · "
+                  f"due [bold]{row['due_at']}[/bold]")
+    _write_and_report(con, number, cfg, open_after)
+    con.close()
+
+
+@invoices.command("pay")
+def invoice_pay(
+    number: str,
+    amount: str = typer.Argument(..., help="What arrived, e.g. 149 or 74.50."),
+    method: str = typer.Option("e-transfer", "--method", "-m",
+                               help=f"One of: {', '.join(invoice_mod.METHODS)}"),
+    reference: str = typer.Option("", "--ref", help="Cheque number, e-transfer id."),
+    note: str = typer.Option("", "--note"),
+) -> None:
+    """Record money that arrived. Part payments are fine."""
+    con = db.connect()
+    try:
+        result = invoice_mod.pay(con, number, amount, method=method,
+                                 reference=reference, note=note)
+    except invoice_mod.InvoiceError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+
+    row = db.invoice(con, number)
+    if result.settled:
+        console.print(f"[green]{number} paid in full.[/green] "
+                      f"{invoice_mod.money(result.total_cents, row['currency'])} "
+                      f"from {row['bill_to_name']}.")
+        if result.credit_cents:
+            console.print(f"[dim]  {invoice_mod.money(result.credit_cents)} more "
+                          f"than the total — a credit against the next one.[/dim]")
+    else:
+        console.print(f"{number}: [bold]{invoice_mod.money(result.paid_cents)}"
+                      f"[/bold] of {invoice_mod.money(result.total_cents)} · "
+                      f"[yellow]{invoice_mod.money(result.balance_cents)} still "
+                      f"owing[/yellow]")
+    con.close()
+
+
+@invoices.command("void")
+def invoice_void(
+    number: str,
+    reason: str = typer.Option(..., "--reason", "-r",
+                               help="Why. In a year this is the only "
+                                    "explanation there will be."),
+) -> None:
+    """Cancel an invoice, keeping its number and saying why.
+
+    Nothing is ever deleted: a gap in a numbered run is the first thing anybody
+    reading a year of invoices asks about.
+    """
+    con = db.connect()
+    try:
+        row = invoice_mod.void(con, number, reason)
+    except invoice_mod.InvoiceError as exc:
+        _fail(str(exc))
+        return
+    con.commit()
+    console.print(f"[dim]{row['number']} void — {row['void_reason']}[/dim]")
+    if row["period"]:
+        console.print(f"[dim]  {invoice_mod.period_label(row['period'])} is free "
+                      f"to raise again.[/dim]")
+    con.close()
+
+
+@invoices.command("run")
+def invoice_run(
+    period: Optional[str] = typer.Option(None, "--period",
+                                         help="YYYY-MM. Default: this month."),
+    draft: bool = typer.Option(False, "--draft",
+                               help="Raise them without issuing them."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Say who would be billed. Writes nothing."),
+) -> None:
+    """Raise this month's invoice for every active client.
+
+    Safe to run twice. A client who already has an invoice for the month is
+    skipped rather than billed again — which is the only reason this is one
+    command instead of a careful morning.
+    """
+    con = db.connect()
+    cfg = config.load()
+    month = period or invoice_mod.period_of()
+
+    if dry_run:
+        due = [s for s in db.subscriptions(con, status="active")
+               if month not in db.invoiced_periods(con, s["place_id"])]
+        console.print(Panel(
+            f"{len(due)} client(s) would be invoiced for "
+            f"{invoice_mod.period_label(month)}.\nNothing was written.",
+            title="dry run", border_style="cyan", expand=False))
+        for sub in due:
+            console.print(f"  {sub['name'] or sub['place_id']}  "
+                          f"[dim]${sub['monthly'] or 0:,.0f}/mo[/dim]")
+        con.close()
+        return
+
+    result = invoice_mod.run(con, cfg, period=month, issue=not draft)
+    con.commit()
+
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="dim")
+    t.add_column()
+    t.add_row("period", invoice_mod.period_label(result.period))
+    t.add_row("raised", f"{len(result.created)} invoice(s) · "
+                        f"{invoice_mod.money(result.total_cents)}")
+    t.add_row("issued", "yes" if result.sent else "no — drafts")
+    console.print(Panel(t, title="monthly run", border_style="green", expand=False))
+
+    for number in result.created:
+        row = db.invoice(con, number)
+        console.print(f"  [green]{number}[/green]  {row['bill_to_name']}")
+        if result.sent:
+            invoice_mod.write(number, invoice_mod.render(
+                con, number, operator=cfg.get("business", {}), cfg=cfg))
+    for name, why in result.skipped:
+        console.print(f"  [dim]{name} — {why}[/dim]")
+    if result.created and result.sent:
+        console.print(f"[dim]  pages written to {invoice_mod.INVOICES_DIR}[/dim]")
+    con.close()
+
+
+@invoices.command("export")
+def invoice_export(
+    year: Optional[int] = typer.Option(None, "--year", help="Default: all of them."),
+    out: str = typer.Option("invoices.csv", "--out", help="Where to write it."),
+) -> None:
+    """Every invoice as a CSV, for whoever does the books."""
+    con = db.connect()
+    text = invoice_mod.export_csv(con, year=year)
+    with open(out, "w", encoding="utf-8", newline="") as fh:
+        fh.write(text)
+    rows = max(0, len(text.strip().splitlines()) - 1)
+    console.print(f"[green]{rows}[/green] invoice(s) → [bold]{out}[/bold]")
     con.close()
 
 

@@ -5,12 +5,15 @@ runtime to chase. Copy it to a folder it can write to and double-click it.
 
 ## Where the data lives
 
-Beside the executable — `leads.db`, `config.json` and `sites/`. That is
-deliberate: a one-file PyInstaller build unpacks itself to a temporary
+Beside the executable — `leads.db`, `config.json`, `sites/` and `invoices/`.
+That is deliberate: a one-file PyInstaller build unpacks itself to a temporary
 directory that Windows deletes on exit, so anything written *inside* the app
 would vanish the moment it closed. Keeping state next to the .exe also means
-the whole thing — app, database, generated sites — copies to another machine on
-a memory stick.
+the whole thing — app, database, generated sites, invoices — copies to another
+machine on a memory stick.
+
+Back up `leads.db` and `invoices/` together. The database is the record of what
+was billed and paid; the folder holds the pages that were actually handed over.
 
 ## Build it
 

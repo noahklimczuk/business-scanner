@@ -218,6 +218,7 @@ class Window(QMainWindow):
 
     def _build_pages(self) -> None:
         from gui.pages.find import FindPage
+        from gui.pages.invoices import InvoicesPage
         from gui.pages.leads import LeadsPage
         from gui.pages.money import MoneyPage
         from gui.pages.settings import SettingsPage
@@ -237,9 +238,13 @@ class Window(QMainWindow):
             self.stack.addWidget(page)
 
         self.sidebar.add_section("Clients")
+        # Invoices sits after Money and before Settings because that is the
+        # order of the work: what they are worth, then what they have been
+        # asked for. Settings stays last — it is not part of anybody's day.
         for offset, (label, factory) in enumerate([
             ("  Sites", SitesPage),
             ("  Money", MoneyPage),
+            ("  Invoices", InvoicesPage),
             ("  Settings", SettingsPage),
         ]):
             index = 3 + offset
@@ -252,7 +257,8 @@ class Window(QMainWindow):
 
     def _shortcuts(self) -> None:
         for key, index in (("Ctrl+1", 0), ("Ctrl+2", 1), ("Ctrl+3", 2),
-                           ("Ctrl+4", 3), ("Ctrl+5", 4), ("Ctrl+6", 5)):
+                           ("Ctrl+4", 3), ("Ctrl+5", 4), ("Ctrl+6", 5),
+                           ("Ctrl+7", 6)):
             action = QAction(self)
             action.setShortcut(QKeySequence(key))
             action.triggered.connect(lambda _=False, i=index: self.go(i))
@@ -373,12 +379,26 @@ class Window(QMainWindow):
         box.exec()
         return box.clickedButton() is yes
 
+    def page_index(self, page_class: type) -> int:
+        """Where a page ended up, by class rather than by memory.
+
+        Sending somebody to page 5 works right up until a page is inserted
+        above it, and then the first thing a new operator sees is the wrong
+        screen with a message about a key that is not on it. Nothing in here
+        counts positions any more.
+        """
+        for index, page in enumerate(self.pages):
+            if isinstance(page, page_class):
+                return index
+        return 0
+
     def _first_run_check(self) -> None:
         """No key, no scan. Say so once, on the page that fixes it."""
         try:
             config.api_key(self.cfg)
         except Exception:                                          # noqa: BLE001
-            self.go(5)
+            from gui.pages.settings import SettingsPage
+            self.go(self.page_index(SettingsPage))
             self.toast("Add your Google Places key to start finding businesses.")
 
     def closeEvent(self, event) -> None:                           # noqa: N802
