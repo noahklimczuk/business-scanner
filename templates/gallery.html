@@ -92,7 +92,7 @@ footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--m
         {% endif %}
         <span class="meta">
           <span>{{ '%.0f'|format(site.bytes / 1024) }} KB</span>
-          <span>{{ site.photos }} photo{{ '' if site.photos == 1 else 's' }}</span>
+          <span>{% if site.photos %}{{ site.photos }} photo{{ '' if site.photos == 1 else 's' }}{% else %}drawn artwork{% endif %}</span>
         </span>
       </a>
     </li>

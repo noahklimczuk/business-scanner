@@ -44,7 +44,6 @@ TIMEOUT = 30
 # Neither provider re-encodes on request, so this is a choice between sizes they
 # already made, not a resize we are asking for.
 WIDE = 1880
-STANDARD = 940
 
 
 class StockUnavailable(RuntimeError):

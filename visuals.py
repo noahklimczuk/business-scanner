@@ -53,10 +53,6 @@ def _jitter(place_id: str, salt: str, spread: float) -> float:
     return ((_seed(place_id, salt) % 2000) / 1000.0 - 1.0) * spread
 
 
-def _pick(place_id: str, salt: str, count: int) -> int:
-    return _seed(place_id, salt) % max(1, count)
-
-
 def _unit(place_id: str, salt: str) -> float:
     """Deterministic value in [0, 1)."""
     return (_seed(place_id, salt) % 10_000) / 10_000.0
